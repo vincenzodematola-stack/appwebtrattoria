@@ -33,10 +33,10 @@
         .add-button:hover {
             background-color: #4b5563;
         }
-        .delete-button {
+        .delete-button, .complete-button {
             transition: transform 0.2s;
         }
-        .delete-button:hover {
+        .delete-button:hover, .complete-button:hover {
             transform: scale(1.1);
         }
         .dialog {
@@ -50,6 +50,8 @@
             border-radius: 1rem;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
             z-index: 1000;
+            max-width: 90%;
+            width: 400px;
         }
         .overlay {
             display: none;
@@ -69,7 +71,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, onSnapshot, collection, query, orderBy, where, addDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, onSnapshot, collection, addDoc, deleteDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase configuration and initialization
@@ -84,13 +86,8 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
-
-        // Global variables
-        window.db = db;
-        window.auth = auth;
-        window.appId = appId;
-        window.userId = null;
-        window.orderCollection = null;
+        let userId = null;
+        let orderCollection = null;
 
         const connectToFirebase = async () => {
             try {
@@ -107,14 +104,14 @@
 
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                window.userId = user.uid;
+                userId = user.uid;
                 // Use a public collection for orders to make them visible to all users
-                window.orderCollection = collection(db, `artifacts/${window.appId}/public/data/orders`);
-                document.getElementById('userIdDisplay').textContent = `ID Utente: ${window.userId}`;
+                orderCollection = collection(db, `artifacts/${appId}/public/data/orders`);
+                document.getElementById('userIdDisplay').textContent = `ID Utente: ${userId}`;
                 setupRealtimeListener();
             } else {
                 console.log("User is signed out.");
-                window.userId = null;
+                userId = null;
                 document.getElementById('userIdDisplay').textContent = '';
                 // Clear orders display if user is signed out
                 document.getElementById('ordersContainer').innerHTML = '';
@@ -124,10 +121,10 @@
         connectToFirebase();
 
         const setupRealtimeListener = () => {
-            if (!window.orderCollection) return;
+            if (!orderCollection) return;
 
             // Listen for real-time updates on the orders collection
-            onSnapshot(window.orderCollection, (snapshot) => {
+            onSnapshot(orderCollection, (snapshot) => {
                 const orders = [];
                 snapshot.forEach(doc => {
                     orders.push({ id: doc.id, ...doc.data() });
@@ -135,15 +132,16 @@
                 renderOrders(orders);
             }, (error) => {
                 console.error("Error listening to orders:", error);
+                showMessage('Errore durante l\'ascolto degli ordini.');
             });
         };
 
         window.addOrder = async (event) => {
             event.preventDefault();
-            const piatto = document.getElementById('piattoInput').value;
+            const piatto = document.getElementById('piattoInput').value.trim();
             const quantita = document.getElementById('quantitaInput').value;
-            const ora = document.getElementById('oraInput').value;
-            const nomeCuoca = document.getElementById('cuocaInput').value;
+            const ora = document.getElementById('oraInput').value.trim();
+            const nomeCuoca = document.getElementById('cuocaInput').value.trim();
 
             if (!piatto || !quantita || !ora || !nomeCuoca) {
                 showMessage('Per favore, compila tutti i campi.');
@@ -151,7 +149,7 @@
             }
 
             try {
-                await addDoc(window.orderCollection, {
+                await addDoc(orderCollection, {
                     piatto,
                     quantita: parseInt(quantita, 10),
                     ora,
@@ -164,9 +162,9 @@
                 document.getElementById('quantitaInput').value = '';
                 document.getElementById('oraInput').value = '';
                 document.getElementById('cuocaInput').value = '';
-
-                showMessage('Ordine aggiunto con successo!');
+                
                 closeModal();
+                showMessage('Ordine aggiunto con successo!');
 
             } catch (e) {
                 console.error("Error adding document: ", e);
@@ -175,9 +173,9 @@
         };
 
         window.deleteOrder = async (orderId) => {
-            if (!window.orderCollection) return;
+            if (!orderCollection) return;
             try {
-                await deleteDoc(doc(window.orderCollection, orderId));
+                await deleteDoc(doc(orderCollection, orderId));
                 showMessage('Ordine eliminato con successo.');
             } catch (e) {
                 console.error("Error removing document: ", e);
@@ -186,9 +184,9 @@
         };
 
         window.toggleComplete = async (orderId, isCompleted) => {
-            if (!window.orderCollection) return;
+            if (!orderCollection) return;
             try {
-                await updateDoc(doc(window.orderCollection, orderId), {
+                await updateDoc(doc(orderCollection, orderId), {
                     isCompleted: !isCompleted
                 });
             } catch (e) {
@@ -201,11 +199,21 @@
             const container = document.getElementById('ordersContainer');
             container.innerHTML = ''; // Clear existing orders
 
-            const sortedOrders = orders.sort((a, b) => a.ora.localeCompare(b.ora));
+            // Sort orders by completion status and then by time
+            const sortedOrders = orders.sort((a, b) => {
+                if (a.isCompleted && !b.isCompleted) return 1;
+                if (!a.isCompleted && b.isCompleted) return -1;
+                return a.ora.localeCompare(b.ora);
+            });
+
+            if (sortedOrders.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 text-lg mt-8">Nessun ordine in arrivo. Tempo di pausa!</p>';
+                return;
+            }
 
             sortedOrders.forEach(order => {
                 const orderCard = document.createElement('div');
-                orderCard.className = `order-card p-6 mb-4 flex flex-col md:flex-row justify-between items-center ${order.isCompleted ? 'bg-green-100' : ''}`;
+                orderCard.className = `order-card p-6 mb-4 flex flex-col md:flex-row justify-between items-center ${order.isCompleted ? 'bg-green-100' : 'bg-gray-50'} border-l-4 ${order.isCompleted ? 'border-green-500' : 'border-blue-500'}`;
                 orderCard.innerHTML = `
                     <div class="flex-1 mb-4 md:mb-0">
                         <div class="text-lg font-semibold text-gray-800">${order.nomeCuoca}</div>
@@ -216,10 +224,10 @@
                         <div class="text-gray-600">Da preparare per le: <span class="font-bold">${order.ora}</span></div>
                     </div>
                     <div class="flex items-center space-x-4">
-                        <button onclick="toggleComplete('${order.id}', ${order.isCompleted})" class="bg-blue-500 text-white rounded-full p-3 hover:bg-blue-600 focus:outline-none">
+                        <button onclick="toggleComplete('${order.id}', ${order.isCompleted})" class="complete-button text-white rounded-full p-3 focus:outline-none ${order.isCompleted ? 'bg-blue-500 hover:bg-blue-600' : 'bg-green-500 hover:bg-green-600'}">
                             <i class="fas fa-check"></i>
                         </button>
-                        <button onclick="deleteOrder('${order.id}')" class="bg-red-500 text-white rounded-full p-3 hover:bg-red-600 focus:outline-none delete-button">
+                        <button onclick="deleteOrder('${order.id}')" class="delete-button bg-red-500 text-white rounded-full p-3 hover:bg-red-600 focus:outline-none">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -231,6 +239,7 @@
         function getIconForDish(dish) {
             const lowerDish = dish.toLowerCase();
             if (lowerDish.includes('pasta')) return '<i class="fas fa-bowl-rice"></i>';
+            if (lowerDish.includes('patate')) return '<i class="fas fa-potato-fries"></i>';
             if (lowerDish.includes('carne')) return '<i class="fas fa-drumstick-bite"></i>';
             if (lowerDish.includes('pesce')) return '<i class="fas fa-fish"></i>';
             if (lowerDish.includes('verdura')) return '<i class="fas fa-carrot"></i>';
@@ -251,11 +260,14 @@
         function showMessage(message) {
             const messageBox = document.getElementById('messageBox');
             messageBox.textContent = message;
-            messageBox.classList.remove('opacity-0', 'scale-95');
-            messageBox.classList.add('opacity-100', 'scale-100');
+            messageBox.classList.remove('opacity-0', 'scale-95', 'hidden');
+            messageBox.classList.add('opacity-100', 'scale-100', 'block');
             setTimeout(() => {
                 messageBox.classList.remove('opacity-100', 'scale-100');
                 messageBox.classList.add('opacity-0', 'scale-95');
+                setTimeout(() => {
+                    messageBox.classList.add('hidden');
+                }, 300);
             }, 3000);
         }
     </script>
@@ -284,7 +296,7 @@
         </div>
 
         <!-- Floating message box -->
-        <div id="messageBox" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg opacity-0 scale-95 transition-all duration-300">
+        <div id="messageBox" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg opacity-0 scale-95 transition-all duration-300 hidden">
             Messaggio di esempio
         </div>
     </main>
@@ -295,7 +307,7 @@
     </footer>
 
     <!-- Modal Dialog for adding order -->
-    <div id="overlay" class="overlay"></div>
+    <div id="overlay" class="overlay" onclick="closeModal()"></div>
     <div id="addOrderDialog" class="dialog">
         <h2 class="text-xl font-bold mb-4 text-gray-800">Aggiungi un nuovo ordine</h2>
         <form onsubmit="addOrder(event)">
@@ -316,10 +328,10 @@
                 <input type="time" id="oraInput" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
             </div>
             <div class="flex items-center justify-between">
-                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
                     Aggiungi
                 </button>
-                <button type="button" onclick="closeModal()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline">
+                <button type="button" onclick="closeModal()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
                     Annulla
                 </button>
             </div>
