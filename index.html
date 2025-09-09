@@ -40,7 +40,7 @@
 </head>
 <body class="p-4 md:p-8">
 
-    <!-- Pulsante per attivare l'audio e selezionare il ruolo -->
+    <!-- Schermata di selezione del ruolo -->
     <div id="role-selection-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-90 z-50 flex flex-col justify-center items-center p-4">
         <h2 class="text-white text-3xl font-bold mb-6">Seleziona il tuo ruolo</h2>
         <div class="space-y-4">
@@ -103,8 +103,11 @@
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Imposta il livello di log per il debug di Firestore
         setLogLevel('debug');
 
+        // Variabili globali fornite dall'ambiente
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
@@ -114,61 +117,56 @@
         let audioContext;
         let firstLoad = true;
         let audioReady = false;
+        let currentRole = null;
 
-        // Funzione per generare il suono "beep beep"
+        // Funzione per generare e riprodurre il suono "beep beep"
         function playBeepSound() {
-            if (!audioReady) return;
-            try {
-                if (!audioContext) {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.type = 'sine';
-                oscillator.frequency.value = 440; // A standard beep tone
-                gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+            if (!audioReady || !audioContext) return;
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 440; // Tono standard
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
 
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
 
-                oscillator.start(0);
-                oscillator.stop(audioContext.currentTime + 0.2); // Play for 200ms
-            } catch (e) {
-                console.error("Errore nella riproduzione dell'audio:", e);
-            }
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.2); // Riproduci per 200ms
         }
 
+        // Gestisce la selezione del ruolo
         window.selectRole = function(role) {
+            currentRole = role;
             document.getElementById('role-selection-overlay').style.display = 'none';
             document.getElementById('app-container').style.display = 'block';
 
-            if (role === 'operatore') {
+            if (currentRole === 'operatore') {
                 document.getElementById('operator-panel').classList.remove('hidden');
                 document.getElementById('subtitle').textContent = "Pannello Operatore: Aggiungi e gestisci gli ordini.";
-            } else if (role === 'cuoca') {
+            } else if (currentRole === 'cuoca') {
                 document.getElementById('subtitle').textContent = "Pannello Cuoca: Visualizza gli ordini in tempo reale.";
             }
 
             // Attiva l'audio dopo la selezione del ruolo
             try {
-                if (!audioContext) {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                }
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 audioReady = true;
-                playBeepSound();
+                playBeepSound(); // Suono di prova
                 showMessage("Audio attivato con successo!");
             } catch (e) {
                 console.error("Errore nell'attivare l'audio:", e);
-                showMessage("Errore nell'attivare l'audio. Riprova.");
+                showMessage("Errore nell'attivare l'audio. L'app continuerà a funzionare, ma senza suono.");
             }
         };
 
-        async function initializeApp() {
+        // Inizializza Firebase e gestisce l'autenticazione
+        async function initializeFirebase() {
             try {
                 if (!firebaseConfig.apiKey) {
-                    console.error("Firebase config is missing. Please ensure __firebase_config is set.");
-                    showMessage("Errore: Configurazione Firebase mancante.");
+                    console.error("Configurazione Firebase mancante.");
+                    showMessage("Errore: Configurazione Firebase mancante. Controlla la console.");
                     return;
                 }
                 app = initializeApp(firebaseConfig);
@@ -190,7 +188,7 @@
                             }
                         } catch (error) {
                             console.error("Errore di autenticazione:", error);
-                            showMessage("Errore di autenticazione. L'app non funzionerà correttamente.");
+                            showMessage("Errore di autenticazione. L'app potrebbe non funzionare correttamente.");
                         }
                     }
                 });
@@ -201,8 +199,9 @@
             }
         }
         
-        initializeApp();
+        initializeFirebase();
 
+        // Mostra messaggi di feedback all'utente
         function showMessage(text) {
             const messageBox = document.getElementById('messageBox');
             messageBox.textContent = text;
@@ -212,6 +211,7 @@
             }, 3000);
         }
 
+        // Funzione per aggiungere un ordine al database
         window.aggiungiOrdine = async function() {
             const piattoInput = document.getElementById('piattoInput');
             const quantitaInput = document.getElementById('quantitaInput');
@@ -248,6 +248,7 @@
             }
         };
 
+        // Funzione per eliminare un ordine dal database
         window.eliminaOrdine = async function(id) {
             try {
                 if (!db) {
@@ -262,6 +263,7 @@
             }
         };
 
+        // Funzione per mettersi in ascolto degli ordini in tempo reale
         function startListeningForOrders() {
             if (!ordiniCollection) {
                 console.error("Errore: Collezione ordini non definita.");
@@ -276,7 +278,7 @@
                     }
                 });
 
-                if (newOrders && !firstLoad && audioReady) {
+                if (newOrders && !firstLoad && audioReady && currentRole === 'cuoca') {
                     playBeepSound();
                     showMessage("Nuovi ordini in arrivo!");
                 }
@@ -289,6 +291,7 @@
             });
         }
         
+        // Funzione per renderizzare la lista degli ordini
         function renderOrders(docs) {
             const container = document.getElementById('ordiniContainer');
             container.innerHTML = '';
@@ -317,7 +320,7 @@
             });
             
             // Nascondi il pulsante elimina se il ruolo è "cuoca"
-            if (document.getElementById('operator-panel').classList.contains('hidden')) {
+            if (currentRole === 'cuoca') {
                 const deleteButtons = document.querySelectorAll('.delete-btn');
                 deleteButtons.forEach(btn => btn.style.display = 'none');
             }
