@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pannello Ordini Trattoria</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+        }
+        .container {
+            max-width: 900px;
+        }
+        .section-card {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+        .order-item {
+            border-radius: 8px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .order-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        .delete-btn {
+            opacity: 0.6;
+            transition: opacity 0.2s ease;
+        }
+        .delete-btn:hover {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <!-- Pulsante per attivare l'audio e selezionare il ruolo -->
+    <div id="role-selection-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-90 z-50 flex flex-col justify-center items-center p-4">
+        <h2 class="text-white text-3xl font-bold mb-6">Seleziona il tuo ruolo</h2>
+        <div class="space-y-4">
+            <button onclick="selectRole('operatore')" class="w-full p-4 bg-lime-500 text-white font-bold rounded-lg text-xl shadow-lg hover:bg-lime-600 transition-colors">
+                Sono l'Operatore (Inserisco gli ordini)
+            </button>
+            <button onclick="selectRole('cuoca')" class="w-full p-4 bg-lime-500 text-white font-bold rounded-lg text-xl shadow-lg hover:bg-lime-600 transition-colors">
+                Sono la Cuoca (Visualizzo gli ordini)
+            </button>
+        </div>
+    </div>
+    
+    <div class="container mx-auto" id="app-container" style="display: none;">
+        <header class="text-center mb-10">
+            <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900 mb-2">Pannello Ordini Trattoria</h1>
+            <p class="text-gray-600 text-lg" id="subtitle"></p>
+        </header>
+
+        <!-- Sezione per aggiungere ordini (solo per operatore) -->
+        <div id="operator-panel" class="section-card p-6 mb-8 border-l-4 border-lime-500 hidden">
+            <h2 class="text-2xl font-bold text-gray-800 mb-5 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-lime-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Aggiungi un Nuovo Ordine
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <input type="text" id="piattoInput" placeholder="Nome del piatto" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lime-500 transition-colors">
+                <input type="number" id="quantitaInput" placeholder="Quantità" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lime-500 transition-colors">
+                <input type="time" id="oraInput" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-lime-500 transition-colors">
+                <button onclick="aggiungiOrdine()" class="w-full p-3 bg-lime-500 text-white font-semibold rounded-lg hover:bg-lime-600 transition-colors focus:outline-none focus:ring-2 focus:ring-lime-500">
+                    Aggiungi Ordine
+                </button>
+            </div>
+        </div>
+
+        <!-- Elenco degli ordini attivi -->
+        <div class="section-card p-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-5 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-lime-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M12 15h.01" />
+                </svg>
+                Ordini in Preparazione
+            </h2>
+            <div id="ordiniContainer" class="space-y-4">
+                <!-- Gli ordini verranno inseriti qui dal JavaScript -->
+            </div>
+        </div>
+
+        <!-- Message Box -->
+        <div id="messageBox" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-center py-3 px-6 rounded-full shadow-xl z-50 transform scale-0 transition-transform duration-300">
+            Messaggio di esempio.
+        </div>
+
+    </div>
+
+    <!-- Firebase SDK (Version 11.6.1 is used) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        const ordiniCollection = collection(db, `artifacts/${appId}/public/data/ordini`);
+        
+        let audioContext;
+        let firstLoad = true;
+        let audioReady = false;
+
+        // Funzione per generare il suono "beep beep"
+        function playBeepSound() {
+            if (!audioReady) return;
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.value = 440; // A standard beep tone
+                gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.start(0);
+                oscillator.stop(audioContext.currentTime + 0.2); // Play for 200ms
+            } catch (e) {
+                console.error("Errore nella riproduzione dell'audio:", e);
+                // Non mostrare messaggi all'utente, gestisci l'errore internamente
+            }
+        }
+
+        window.selectRole = function(role) {
+            document.getElementById('role-selection-overlay').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+
+            if (role === 'operatore') {
+                document.getElementById('operator-panel').classList.remove('hidden');
+                document.getElementById('subtitle').textContent = "Pannello Operatore: Aggiungi e gestisci gli ordini.";
+            } else if (role === 'cuoca') {
+                document.getElementById('subtitle').textContent = "Pannello Cuoca: Visualizza gli ordini in tempo reale.";
+            }
+
+            // Attiva l'audio dopo la selezione del ruolo
+            try {
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                audioReady = true;
+                playBeepSound(); // Fai un suono di prova
+                showMessage("Audio attivato con successo!");
+            } catch (e) {
+                console.error("Errore nell'attivare l'audio:", e);
+                showMessage("Errore nell'attivare l'audio. Riprova.");
+            }
+        };
+
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Authentication error:", error);
+                    showMessage("Errore di autenticazione. Riprova più tardi.");
+                }
+            } else {
+                console.log("User authenticated:", user.uid);
+                startListeningForOrders();
+            }
+        });
+
+        function showMessage(text) {
+            const messageBox = document.getElementById('messageBox');
+            messageBox.textContent = text;
+            messageBox.classList.remove('scale-0');
+            setTimeout(() => {
+                messageBox.classList.add('scale-0');
+            }, 3000);
+        }
+
+        window.aggiungiOrdine = async function() {
+            const piattoInput = document.getElementById('piattoInput');
+            const quantitaInput = document.getElementById('quantitaInput');
+            const oraInput = document.getElementById('oraInput');
+
+            const piatto = piattoInput.value.trim();
+            const quantita = parseInt(quantitaInput.value);
+            const ora = oraInput.value;
+
+            if (!piatto || !quantita || !ora || quantita <= 0) {
+                showMessage("Compila tutti i campi correttamente!");
+                return;
+            }
+
+            try {
+                const newOrder = {
+                    piatto: piatto,
+                    quantita: quantita,
+                    ora: ora,
+                    timestamp: Date.now()
+                };
+                await addDoc(ordiniCollection, newOrder);
+                showMessage("Ordine aggiunto con successo!");
+                piattoInput.value = '';
+                quantitaInput.value = '';
+                oraInput.value = '';
+            } catch (e) {
+                console.error("Errore nell'aggiungere l'ordine:", e);
+                showMessage("Errore. Impossibile aggiungere l'ordine.");
+            }
+        };
+
+        window.eliminaOrdine = async function(id) {
+            try {
+                await deleteDoc(doc(db, `artifacts/${appId}/public/data/ordini`, id));
+                showMessage("Ordine completato e rimosso.");
+            } catch (e) {
+                console.error("Errore nell'eliminare l'ordine:", e);
+                showMessage("Errore. Impossibile eliminare l'ordine.");
+            }
+        };
+
+        function startListeningForOrders() {
+            const ordiniRef = query(ordiniCollection, orderBy("timestamp", "asc"));
+            onSnapshot(ordiniRef, (snapshot) => {
+                let newOrders = false;
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added") {
+                        newOrders = true;
+                    }
+                });
+
+                if (newOrders && !firstLoad && audioReady) {
+                    playBeepSound();
+                    showMessage("Nuovi ordini in arrivo!");
+                }
+                firstLoad = false;
+                
+                renderOrders(snapshot.docs);
+            });
+        }
+        
+        function renderOrders(docs) {
+            const container = document.getElementById('ordiniContainer');
+            container.innerHTML = '';
+            if (docs.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-8">Nessun ordine in attesa. Tutto tranquillo!</p>';
+            }
+            docs.forEach(doc => {
+                const ordine = doc.data();
+                const id = doc.id;
+                const card = `
+                    <div class="order-item p-5 bg-gray-50 border border-gray-200 flex items-center justify-between">
+                        <div>
+                            <p class="text-sm text-gray-500 font-medium">Ora di consegna: <span class="font-semibold text-gray-700">${ordine.ora}</span></p>
+                            <h3 class="text-xl md:text-2xl font-bold text-gray-900 mt-1">
+                                <span class="text-lime-500">${ordine.quantita}</span> x ${ordine.piatto}
+                            </h3>
+                        </div>
+                        <button onclick="eliminaOrdine('${id}')" class="delete-btn p-2 rounded-full text-red-500 hover:bg-red-100 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </button>
+                    </div>
+                `;
+                container.innerHTML += card;
+            });
+            
+            // Nascondi il pulsante elimina se il ruolo è "cuoca"
+            if (document.getElementById('operator-panel').classList.contains('hidden')) {
+                const deleteButtons = document.querySelectorAll('.delete-btn');
+                deleteButtons.forEach(btn => btn.style.display = 'none');
+            }
+        }
+    </script>
+</body>
+</html>
