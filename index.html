@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Gestione Ordini Trattoria</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Importazione delle librerie Firebase necessarie -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, updateDoc, doc, query, where, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variabili globali fornite dall'ambiente Canvas.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth;
+        let isAuthReady = false;
+        let userId;
+
+        // Suono per le notifiche
+        const audioData = 'data:audio/wav;base64,UklGRl9QDj8WAIQAJkQAAAAuAQB4AIgABAA4AIAAAAAOAEIAAADWz/4kAAIAgAgAFAAQAgAAAAgACAAoAAj/oEIAAAABgACAAEAAAABAEAAAP/gAQAADj8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsL2BvAAAAAAAAAAAPJ+DHgwABAA4AEAAAAAMAEgAAABYAQAAAAAAAAAAAAAAAAAAAAAAAPAAAAAAAAAAMAEgAAABYAQAAAAAAAMAAAAPAAAAADIAQAAAAAAAAAAAAAAAAAAAAAAPAABAAAAPAAAAADIAQAAAAAAAPAAAAAAAAAAAAAAACxI3gAAAD+B4QAATf+gAABAAQAAAAAAAAAAAeAEAAAAAAAAAAAAAAAAAAAAAADIAAAAKAAAAABoAAAAA4D4AAAAAAAAAAACwAAAAAAAAAACEAgAAAKAAAP+gAABAAgABAA4AAAAAAJMAABAAAgACgAIAAAAAAAAAAAAAAAAADgBgACABAAAABYAQAAADgAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAHAAAAAAAA4D4AAAAAAAAAABAABAAAAAD+AAAAPAAAADAAAAAAPAAAAKAAAAAAAAAAAABAAABAAAgAAA4AAAAA';
+        const newOrderSound = new Audio(audioData);
+
+        // Funzione per inizializzare Firebase
+        async function initializeFirebase() {
+            try {
+                setLogLevel('debug');
+                const app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                isAuthReady = true;
+
+                // Mostra l'ID utente per la condivisione tra titolare e cuoca
+                document.getElementById('userIdDisplay').textContent = `ID Utente: ${userId}`;
+
+                console.log("Firebase inizializzato e autenticazione completata.");
+                attachListeners();
+            } catch (error) {
+                console.error("Errore nell'inizializzazione di Firebase:", error);
+            }
+        }
+
+        // Funzione per gestire i listener del database
+        function attachListeners() {
+            if (!isAuthReady) {
+                console.warn("Attesa dell'autenticazione per attaccare i listener.");
+                return;
+            }
+
+            const ordersCollection = collection(db, `artifacts/${appId}/public/data/orders`);
+
+            // Listener per il titolare (tutti gli ordini)
+            onSnapshot(ordersCollection, (snapshot) => {
+                const ownerOrdersList = document.getElementById('ownerOrdersList');
+                ownerOrdersList.innerHTML = '';
+                snapshot.forEach((doc) => {
+                    const order = doc.data();
+                    const li = document.createElement('li');
+                    li.className = `p-4 m-2 rounded-lg shadow-md border-l-4 ${order.status === 'ready' ? 'border-green-500 bg-gray-100' : 'border-blue-500 bg-white'}`;
+                    li.innerHTML = `
+                        <p class="font-bold text-lg">${order.readyTime}</p>
+                        <p class="text-gray-700 whitespace-pre-wrap">${order.orderText}</p>
+                        <p class="text-sm text-gray-500">Stato: ${order.status === 'pending' ? 'In preparazione' : 'Pronto'}</p>
+                        <button data-id="${doc.id}" class="delete-btn mt-2 bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300">
+                            Elimina Ordine
+                        </button>
+                    `;
+                    ownerOrdersList.appendChild(li);
+                });
+            });
+
+            // Listener per la cuoca (solo ordini in sospeso)
+            const pendingOrdersQuery = query(ordersCollection, where("status", "==", "pending"));
+            onSnapshot(pendingOrdersQuery, (snapshot) => {
+                const cookOrdersList = document.getElementById('cookOrdersList');
+                cookOrdersList.innerHTML = '';
+                let newOrderArrived = false;
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === "added") {
+                        newOrderArrived = true;
+                        console.log("Nuovo ordine ricevuto dalla cuoca:", change.doc.data());
+                    }
+                });
+
+                if (newOrderArrived) {
+                    newOrderSound.play().catch(e => console.error("Errore nella riproduzione dell'audio:", e));
+                }
+
+                snapshot.forEach((doc) => {
+                    const order = doc.data();
+                    const li = document.createElement('li');
+                    li.className = 'p-4 m-2 rounded-lg shadow-md border-l-4 border-yellow-500 bg-white';
+                    li.innerHTML = `
+                        <p class="font-bold text-lg">${order.readyTime}</p>
+                        <p class="text-gray-700 whitespace-pre-wrap">${order.orderText}</p>
+                        <button data-id="${doc.id}" class="ready-btn mt-2 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300">
+                            Segna come Pronto
+                        </button>
+                    `;
+                    cookOrdersList.appendChild(li);
+                });
+            });
+
+            // Gestione dei click sui bottoni "Segna come Pronto" e "Elimina Ordine"
+            document.addEventListener('click', async (e) => {
+                const id = e.target.dataset.id;
+                if (!id) return;
+
+                const orderRef = doc(db, `artifacts/${appId}/public/data/orders`, id);
+
+                if (e.target.classList.contains('ready-btn')) {
+                    try {
+                        await updateDoc(orderRef, { status: 'ready' });
+                        console.log("Ordine segnato come pronto:", id);
+                    } catch (error) {
+                        console.error("Errore nell'aggiornamento dell'ordine:", error);
+                    }
+                } else if (e.target.classList.contains('delete-btn')) {
+                    try {
+                        await deleteDoc(orderRef);
+                        console.log("Ordine eliminato:", id);
+                    } catch (error) {
+                        console.error("Errore nell'eliminazione dell'ordine:", error);
+                    }
+                }
+            });
+        }
+
+        // Gestione dell'invio del modulo per aggiungere un nuovo ordine
+        document.getElementById('orderForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!isAuthReady) {
+                console.error("Firebase non è ancora pronto.");
+                return;
+            }
+
+            const readyTime = document.getElementById('readyTime').value;
+            const orderText = document.getElementById('orderText').value.trim();
+
+            if (!readyTime || !orderText) {
+                document.getElementById('statusMessage').textContent = 'Per favore, compila tutti i campi.';
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, `artifacts/${appId}/public/data/orders`), {
+                    readyTime,
+                    orderText,
+                    status: 'pending',
+                    createdAt: new Date().toISOString(),
+                    ownerId: userId
+                });
+                document.getElementById('statusMessage').textContent = 'Ordine aggiunto con successo!';
+                document.getElementById('orderForm').reset();
+            } catch (error) {
+                console.error("Errore nell'aggiunta dell'ordine:", error);
+                document.getElementById('statusMessage').textContent = 'Errore nell\'aggiunta dell\'ordine.';
+            }
+        });
+
+        // Funzione per mostrare la vista del titolare o della cuoca
+        function showView(viewId) {
+            document.querySelectorAll('.app-view').forEach(view => {
+                view.classList.add('hidden');
+            });
+            document.getElementById(viewId).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600');
+                btn.classList.add('bg-blue-500');
+            });
+            document.querySelector(`[onclick="showView('${viewId}')"]`).classList.add('bg-blue-600');
+        }
+
+        // Event listeners per cambiare vista
+        document.addEventListener('DOMContentLoaded', () => {
+            showView('owner-app');
+            initializeFirebase();
+        });
+
+        // Esposizione delle funzioni globalmente per gli handler onclick
+        window.showView = showView;
+    </script>
+</head>
+<body class="bg-gray-50 font-sans leading-normal tracking-normal p-4">
+
+    <!-- Selettore della vista -->
+    <div class="flex justify-center mb-6">
+        <button onclick="showView('owner-app')" class="tab-btn bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-l-lg transition duration-300">
+            Vista Titolare
+        </button>
+        <button onclick="showView('cook-app')" class="tab-btn bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-r-lg transition duration-300">
+            Vista Cuoca
+        </button>
+    </div>
+
+    <!-- ID Utente per la connessione tra i dispositivi -->
+    <div class="text-center text-sm text-gray-500 mb-4" id="userIdDisplay"></div>
+
+    <!-- Sezione dell'app per il Titolare -->
+    <div id="owner-app" class="app-view hidden">
+        <div class="container mx-auto max-w-lg bg-white rounded-xl shadow-lg p-6">
+            <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Gestione Ordini</h1>
+
+            <!-- Form per aggiungere un nuovo ordine -->
+            <form id="orderForm" class="space-y-4">
+                <div>
+                    <label for="readyTime" class="block text-sm font-medium text-gray-700">Ora di Uscita:</label>
+                    <input type="time" id="readyTime" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition duration-300">
+                </div>
+                <div>
+                    <label for="orderText" class="block text-sm font-medium text-gray-700">Dettagli Ordine:</label>
+                    <textarea id="orderText" rows="4" required placeholder="Es: 3 pasta e fagioli, 2 roastbeef" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-200 focus:ring-opacity-50 transition duration-300"></textarea>
+                </div>
+                <button type="submit" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-300">
+                    Aggiungi Ordine
+                </button>
+                <div id="statusMessage" class="text-center mt-2 text-sm font-semibold"></div>
+            </form>
+
+            <hr class="my-6">
+
+            <!-- Lista degli ordini in corso -->
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-4">Ordini in Corso</h2>
+            <ul id="ownerOrdersList" class="space-y-4">
+                <!-- Gli ordini verranno inseriti qui dal database in tempo reale -->
+                <li class="p-4 rounded-lg bg-gray-100 text-center text-gray-500">Nessun ordine presente.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Sezione dell'app per la Cuoca -->
+    <div id="cook-app" class="app-view hidden">
+        <div class="container mx-auto max-w-lg bg-white rounded-xl shadow-lg p-6">
+            <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">Lista Ordini per la Cuoca</h1>
+            <h2 class="text-2xl font-bold text-center text-gray-800 mb-4">Ordini in Preparazione</h2>
+            <ul id="cookOrdersList" class="space-y-4">
+                <!-- Gli ordini verranno inseriti qui dal database in tempo reale -->
+                <li class="p-4 rounded-lg bg-gray-100 text-center text-gray-500">In attesa di nuovi ordini...</li>
+            </ul>
+        </div>
+    </div>
+
+</body>
+  </html>
