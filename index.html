@@ -102,17 +102,15 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        setLogLevel('debug');
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        
-        const ordiniCollection = collection(db, `artifacts/${appId}/public/data/ordini`);
-        
+        let app, db, auth;
+        let ordiniCollection;
         let audioContext;
         let firstLoad = true;
         let audioReady = false;
@@ -138,7 +136,6 @@
                 oscillator.stop(audioContext.currentTime + 0.2); // Play for 200ms
             } catch (e) {
                 console.error("Errore nella riproduzione dell'audio:", e);
-                // Non mostrare messaggi all'utente, gestisci l'errore internamente
             }
         }
 
@@ -159,7 +156,7 @@
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 }
                 audioReady = true;
-                playBeepSound(); // Fai un suono di prova
+                playBeepSound();
                 showMessage("Audio attivato con successo!");
             } catch (e) {
                 console.error("Errore nell'attivare l'audio:", e);
@@ -167,23 +164,44 @@
             }
         };
 
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) {
-                try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                    } else {
-                        await signInAnonymously(auth);
-                    }
-                } catch (error) {
-                    console.error("Authentication error:", error);
-                    showMessage("Errore di autenticazione. Riprova più tardi.");
+        async function initializeApp() {
+            try {
+                if (!firebaseConfig.apiKey) {
+                    console.error("Firebase config is missing. Please ensure __firebase_config is set.");
+                    showMessage("Errore: Configurazione Firebase mancante.");
+                    return;
                 }
-            } else {
-                console.log("User authenticated:", user.uid);
-                startListeningForOrders();
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                ordiniCollection = collection(db, `artifacts/${appId}/public/data/ordini`);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        console.log("Utente autenticato:", user.uid);
+                        startListeningForOrders();
+                    } else {
+                        console.log("Nessun utente autenticato. Tentativo di accesso anonimo.");
+                        try {
+                            if (initialAuthToken) {
+                                await signInWithCustomToken(auth, initialAuthToken);
+                            } else {
+                                await signInAnonymously(auth);
+                            }
+                        } catch (error) {
+                            console.error("Errore di autenticazione:", error);
+                            showMessage("Errore di autenticazione. L'app non funzionerà correttamente.");
+                        }
+                    }
+                });
+
+            } catch (e) {
+                console.error("Errore nell'inizializzazione dell'app Firebase:", e);
+                showMessage("Errore critico all'avvio dell'app. Controlla la console per i dettagli.");
             }
-        });
+        }
+        
+        initializeApp();
 
         function showMessage(text) {
             const messageBox = document.getElementById('messageBox');
@@ -209,6 +227,10 @@
             }
 
             try {
+                if (!ordiniCollection) {
+                    showMessage("Database non pronto. Riprova tra poco.");
+                    return;
+                }
                 const newOrder = {
                     piatto: piatto,
                     quantita: quantita,
@@ -228,6 +250,10 @@
 
         window.eliminaOrdine = async function(id) {
             try {
+                if (!db) {
+                    showMessage("Database non pronto. Riprova tra poco.");
+                    return;
+                }
                 await deleteDoc(doc(db, `artifacts/${appId}/public/data/ordini`, id));
                 showMessage("Ordine completato e rimosso.");
             } catch (e) {
@@ -237,6 +263,10 @@
         };
 
         function startListeningForOrders() {
+            if (!ordiniCollection) {
+                console.error("Errore: Collezione ordini non definita.");
+                return;
+            }
             const ordiniRef = query(ordiniCollection, orderBy("timestamp", "asc"));
             onSnapshot(ordiniRef, (snapshot) => {
                 let newOrders = false;
@@ -253,6 +283,9 @@
                 firstLoad = false;
                 
                 renderOrders(snapshot.docs);
+            }, (error) => {
+                console.error("Errore nell'ascolto degli ordini:", error);
+                showMessage("Errore di connessione. Gli ordini potrebbero non aggiornarsi.");
             });
         }
         
