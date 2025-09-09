@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestione Ordini Trattoria</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f3e9;
+            color: #4a2d1a;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+        .card {
+            background-color: #fff;
+            border-radius: 1.5rem;
+            padding: 2rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .btn-primary {
+            background-color: #d1512f;
+            color: #fff;
+        }
+        .btn-secondary {
+            background-color: #f5f5f5;
+            color: #d1512f;
+        }
+        .btn-danger {
+            background-color: #dc2626;
+            color: #fff;
+        }
+        .input-field {
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+        }
+        .kitchen-card {
+            background-color: #4a2d1a;
+            color: #fff;
+        }
+        .kitchen-card .btn {
+            background-color: #d1512f;
+            color: #fff;
+        }
+        .modal {
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+        .notification-bell {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            cursor: pointer;
+            z-index: 1000;
+            background-color: #d1512f;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+        }
+        .notification-bell.active {
+            animation: ring 1s infinite;
+        }
+        @keyframes ring {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-[#f7f3e9] min-h-screen flex flex-col items-center">
+    <div class="container py-8">
+        <h1 class="text-4xl md:text-5xl font-bold text-center mb-6 text-[#d1512f]">Gestione Ordini Trattoria</h1>
+        <p class="text-center text-lg md:text-xl text-[#4a2d1a] mb-8">Un'app semplice per il personale di sala e la cuoca.</p>
+
+        <!-- Modale per la conferma (generica) -->
+        <div id="modal" class="fixed inset-0 z-50 flex items-center justify-center hidden modal">
+            <div class="bg-white p-8 rounded-2xl shadow-lg w-11/12 md:w-1/3 text-center">
+                <h2 class="text-2xl font-bold mb-4 text-[#d1512f]">Avviso Importante</h2>
+                <p id="modal-message" class="mb-6 text-[#4a2d1a]"></p>
+                <button id="modal-close-btn" class="btn btn-primary">OK</button>
+            </div>
+        </div>
+        
+        <!-- Modale per la conferma di cancellazione -->
+        <div id="delete-modal" class="fixed inset-0 z-50 flex items-center justify-center hidden modal">
+            <div class="bg-white p-8 rounded-2xl shadow-lg w-11/12 md:w-1/3 text-center">
+                <h2 class="text-2xl font-bold mb-4 text-[#dc2626]">Conferma Eliminazione</h2>
+                <p class="mb-6 text-[#4a2d1a]">Sei sicuro di voler eliminare tutti gli ordini della giornata? Questa operazione non può essere annullata.</p>
+                <div class="flex justify-around">
+                    <button id="delete-confirm-btn" class="btn btn-danger">Conferma</button>
+                    <button id="delete-cancel-btn" class="btn btn-secondary">Annulla</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sezione per il personale di sala -->
+        <div class="card mb-8">
+            <h2 class="text-3xl font-bold mb-4 text-[#d1512f]">Per il Personale di Sala</h2>
+            <div class="grid md:grid-cols-2 gap-4 mb-6">
+                <div class="flex flex-col">
+                    <label for="order-time" class="mb-2 text-[#4a2d1a] font-semibold">Orario (es. 12:30):</label>
+                    <input type="time" id="order-time" class="input-field" value="12:30">
+                </div>
+                <div class="flex flex-col">
+                    <label for="dish-name" class="mb-2 text-[#4a2d1a] font-semibold">Piatto:</label>
+                    <input type="text" id="dish-name" class="input-field" placeholder="Es. Pasta e fagioli" required>
+                </div>
+                <div class="flex flex-col">
+                    <label for="quantity" class="mb-2 text-[#4a2d1a] font-semibold">Quantità:</label>
+                    <input type="number" id="quantity" class="input-field" value="1" min="1" required>
+                </div>
+                <div class="flex items-end">
+                    <button id="add-order-btn" class="btn btn-primary w-full">Aggiungi Ordine</button>
+                </div>
+            </div>
+            <hr class="border-t-2 border-gray-200 my-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-2xl font-bold text-[#d1512f]">Ordini Inviati</h3>
+                <button id="delete-all-orders-btn" class="btn btn-danger text-sm">Elimina tutti</button>
+            </div>
+            <ul id="sent-orders" class="list-none text-[#4a2d1a] space-y-2"></ul>
+        </div>
+
+        <!-- Sezione per la cuoca -->
+        <div class="card kitchen-card">
+            <h2 class="text-3xl font-bold mb-4">Per la Cuoca</h2>
+            <ul id="kitchen-orders" class="space-y-4"></ul>
+        </div>
+
+    </div>
+
+    <!-- Campanello di avviso -->
+    <div id="notification-bell" class="notification-bell hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+        </svg>
+    </div>
+
+    <!-- Script Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, collection, onSnapshot, addDoc, updateDoc, getDocs, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Log levels for Firestore, useful for debugging
+        setLogLevel('Debug');
+
+        // Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        
+        let userId = null;
+        let isAuthReady = false;
+
+        // Firebase authentication
+        async function authenticate() {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                isAuthReady = true;
+                console.log("Authentication successful. User ID:", userId);
+            } catch (error) {
+                console.error("Firebase authentication failed:", error);
+            }
+        }
+
+        // --- Variabili globali per gli elementi DOM ---
+        const addOrderBtn = document.getElementById('add-order-btn');
+        const deleteAllOrdersBtn = document.getElementById('delete-all-orders-btn');
+        const orderTimeInput = document.getElementById('order-time');
+        const dishNameInput = document.getElementById('dish-name');
+        const quantityInput = document.getElementById('quantity');
+        const sentOrdersList = document.getElementById('sent-orders');
+        const kitchenOrdersList = document.getElementById('kitchen-orders');
+        const notificationBell = document.getElementById('notification-bell');
+        const modal = document.getElementById('modal');
+        const modalMessage = document.getElementById('modal-message');
+        const modalCloseBtn = document.getElementById('modal-close-btn');
+        const deleteModal = document.getElementById('delete-modal');
+        const deleteConfirmBtn = document.getElementById('delete-confirm-btn');
+        const deleteCancelBtn = document.getElementById('delete-cancel-btn');
+
+        // --- Funzioni per l'interfaccia utente ---
+        function showModal(message) {
+            modalMessage.textContent = message;
+            modal.classList.remove('hidden');
+        }
+
+        modalCloseBtn.onclick = () => {
+            modal.classList.add('hidden');
+        };
+        
+        function playAudioAlert() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'sine';
+            oscillator.frequency.value = 440; // Frequenza del campanello
+            gainNode.gain.value = 0; // Inizia con volume zero
+            
+            // Collega l'oscillatore al gain, e il gain all'uscita audio
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.start(0);
+
+            // Suono a campanello
+            const now = audioContext.currentTime;
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.5, now + 0.1);
+            gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+
+            setTimeout(() => {
+                oscillator.stop();
+            }, 600);
+        }
+
+        function createOrderElement(order, isKitchenView) {
+            const li = document.createElement('li');
+            li.className = 'p-4 rounded-xl shadow-inner';
+            
+            let html = `
+                <div class="flex justify-between items-center mb-2">
+                    <span class="font-bold text-lg">${order.dishName} x${order.quantity}</span>
+                    <span class="text-sm opacity-80">${order.time}</span>
+                </div>
+                <p class="text-sm mb-2 opacity-90">Inviato alle: ${new Date(order.timestamp).toLocaleTimeString()}</p>
+            `;
+
+            if (isKitchenView) {
+                li.classList.add('bg-gray-700', 'text-white');
+                if (order.status === 'pending') {
+                    html += `
+                        <div class="text-right">
+                            <button class="btn btn-primary mark-ready-btn" data-id="${order.id}">Pronto</button>
+                        </div>
+                    `;
+                } else if (order.status === 'ready') {
+                    li.classList.add('opacity-50');
+                    html += `<p class="mt-2 text-sm text-green-400 font-semibold">Pronto!</p>`;
+                }
+            } else { // View for sala
+                li.classList.add('bg-gray-100');
+                if (order.status === 'ready') {
+                    li.classList.add('bg-green-100', 'border-l-4', 'border-green-500');
+                    html += `<p class="mt-2 text-sm text-green-700 font-semibold">PRONTO!</p>`;
+                } else {
+                    html += `<p class="mt-2 text-sm opacity-70">In attesa...</p>`;
+                }
+            }
+            
+            li.innerHTML = html;
+            return li;
+        }
+
+        // --- Gestione dati con Firestore ---
+        async function addOrder() {
+            const orderTime = orderTimeInput.value;
+            const dishName = dishNameInput.value.trim();
+            const quantity = parseInt(quantityInput.value);
+
+            if (!dishName || !orderTime || quantity <= 0) {
+                showModal("Per favore, compila tutti i campi correttamente.");
+                return;
+            }
+
+            try {
+                const ordersCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'trattoria_orders');
+                await addDoc(ordersCollectionRef, {
+                    time: orderTime,
+                    dishName: dishName,
+                    quantity: quantity,
+                    timestamp: Date.now(),
+                    status: 'pending' // pending, ready
+                });
+                
+                dishNameInput.value = '';
+                quantityInput.value = '1';
+
+            } catch (e) {
+                console.error("Errore nell'aggiungere il documento:", e);
+                showModal("Si è verificato un errore nell'aggiungere l'ordine. Riprova più tardi.");
+            }
+        }
+
+        async function markOrderReady(orderId) {
+            try {
+                const orderDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'trattoria_orders', orderId);
+                await updateDoc(orderDocRef, {
+                    status: 'ready'
+                });
+            } catch (e) {
+                console.error("Errore nell'aggiornare lo stato dell'ordine:", e);
+                showModal("Si è verificato un errore. Riprova più tardi.");
+            }
+        }
+        
+        async function deleteAllOrders() {
+            deleteModal.classList.remove('hidden');
+        }
+
+        // Funzione per eliminare tutti i documenti
+        async function confirmDeleteAllOrders() {
+            try {
+                const ordersCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'trattoria_orders');
+                const querySnapshot = await getDocs(ordersCollectionRef);
+                
+                const deletePromises = querySnapshot.docs.map(d => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'trattoria_orders', d.id)));
+                
+                await Promise.all(deletePromises);
+                
+                console.log("Tutti gli ordini sono stati eliminati con successo.");
+                deleteModal.classList.add('hidden');
+            } catch (e) {
+                console.error("Errore durante l'eliminazione degli ordini:", e);
+                showModal("Si è verificato un errore durante l'eliminazione. Riprova più tardi.");
+                deleteModal.classList.add('hidden');
+            }
+        }
+
+        // --- Listeners per l'interfaccia utente ---
+        addOrderBtn.addEventListener('click', addOrder);
+        deleteAllOrdersBtn.addEventListener('click', deleteAllOrders);
+        deleteConfirmBtn.addEventListener('click', confirmDeleteAllOrders);
+        deleteCancelBtn.addEventListener('click', () => {
+            deleteModal.classList.add('hidden');
+        });
+
+        // Aggiungi un listener di evento per gestire il click sul pulsante "Pronto"
+        kitchenOrdersList.addEventListener('click', (e) => {
+            if (e.target.classList.contains('mark-ready-btn')) {
+                const orderId = e.target.getAttribute('data-id');
+                markOrderReady(orderId);
+            }
+        });
+
+        // --- Sincronizzazione in tempo reale con onSnapshot ---
+        async function setupRealtimeSync() {
+            if (!isAuthReady) {
+                console.warn("Auth not ready, skipping Firestore setup.");
+                return;
+            }
+
+            const ordersCollectionRef = collection(db, 'artifacts', appId, 'public', 'data', 'trattoria_orders');
+            
+            onSnapshot(ordersCollectionRef, (snapshot) => {
+                const allOrders = [];
+                snapshot.forEach((doc) => {
+                    allOrders.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Ordina gli ordini per orario e poi per stato (pronti in fondo)
+                allOrders.sort((a, b) => {
+                    const timeA = a.time;
+                    const timeB = b.time;
+                    if (timeA < timeB) return -1;
+                    if (timeA > timeB) return 1;
+                    return a.status === 'ready' ? 1 : b.status === 'ready' ? -1 : 0;
+                });
+
+                // Aggiorna la vista del personale di sala
+                sentOrdersList.innerHTML = '';
+                allOrders.forEach(order => {
+                    const orderElement = createOrderElement(order, false);
+                    sentOrdersList.appendChild(orderElement);
+                });
+
+                // Aggiorna la vista della cuoca e gestisci l'avviso acustico
+                kitchenOrdersList.innerHTML = '';
+                let newOrderArrived = false;
+                allOrders.forEach(order => {
+                    if (order.status === 'pending') {
+                        const orderElement = createOrderElement(order, true);
+                        kitchenOrdersList.appendChild(orderElement);
+                        if (!sessionStorage.getItem(order.id)) {
+                             newOrderArrived = true;
+                             sessionStorage.setItem(order.id, 'seen');
+                        }
+                    } else if (order.status === 'ready') {
+                         const orderElement = createOrderElement(order, true);
+                         kitchenOrdersList.appendChild(orderElement);
+                    }
+                });
+                
+                if (newOrderArrived) {
+                    playAudioAlert();
+                    notificationBell.classList.remove('hidden');
+                    notificationBell.classList.add('active');
+                    setTimeout(() => {
+                         notificationBell.classList.remove('active');
+                    }, 5000);
+                }
+            });
+        }
+
+        // Avvia l'autenticazione e la sincronizzazione
+        authenticate().then(() => {
+            setupRealtimeSync();
+        });
+
+    </script>
+</body>
+  </html>
