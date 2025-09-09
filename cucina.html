@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schermata Cucina</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, deleteDoc, serverTimestamp, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        setLogLevel('debug');
+
+        let app, db, auth;
+        let userId;
+        let syncedId = null;
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : '';
+        const newOrderSound = new Audio('https://cdn.pixabay.com/audio/2021/08/04/audio_33324666f3.mp3');
+
+        window.onload = async () => {
+            if (Object.keys(firebaseConfig).length > 0) {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                try {
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Firebase authentication failed:", error);
+                }
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                initApp();
+            } else {
+                console.error("Firebase config is missing. App cannot function without it.");
+            }
+        };
+
+        const initApp = () => {
+            const ordersListCucina = document.getElementById('ordersListCucina');
+            const orderCount = document.getElementById('orderCount');
+            const syncIdInput = document.getElementById('syncIdInput');
+            const syncIdStatus = document.getElementById('syncIdStatus');
+            const syncContainer = document.getElementById('syncContainer');
+            
+            syncIdInput.addEventListener('keydown', async (e) => {
+                if (e.key === 'Enter') {
+                    const idToSync = syncIdInput.value.trim();
+                    if (idToSync) {
+                        syncIdStatus.textContent = "Sincronizzazione in corso...";
+                        try {
+                            const syncDocRef = doc(db, `artifacts/${appId}/sync/main`);
+                            await setDoc(syncDocRef, { syncedId: idToSync });
+                            syncIdStatus.textContent = "ID sincronizzato. Attendere la ricarica dei dati.";
+                            syncContainer.classList.add('hidden');
+                        } catch (e) {
+                            console.error("Errore nella sincronizzazione: ", e);
+                            syncIdStatus.textContent = "Errore di sincronizzazione.";
+                        }
+                    }
+                }
+            });
+
+            const renderOrders = (orders, targetElement) => {
+                targetElement.innerHTML = '';
+                if (orders.length === 0) {
+                    targetElement.innerHTML = '<p class="text-gray-500 italic">Nessun ordine in arrivo.</p>';
+                }
+
+                const sortedOrders = orders.sort((a, b) => {
+                    if (a.eta < b.eta) return -1;
+                    if (a.eta > b.eta) return 1;
+                    return 0;
+                });
+
+                sortedOrders.forEach(order => {
+                    const orderElement = createOrderElement(order);
+                    targetElement.appendChild(orderElement);
+                });
+            };
+
+            const createOrderElement = (order) => {
+                const li = document.createElement('li');
+                li.className = `p-4 my-2 rounded-xl shadow-md transition-all duration-300 transform border-2 bg-white border-gray-200`;
+                const notesHtml = order.notes ? `<p class="text-gray-600 italic mt-2 text-sm">${order.notes}</p>` : '';
+                li.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex-grow">
+                            <h3 class="text-lg font-bold text-gray-800">${order.dish}</h3>
+                            <p class="text-sm text-gray-600">Quantità: <span class="font-semibold">${order.quantity}</span></p>
+                        </div>
+                        <div class="flex-shrink-0 text-right">
+                            <p class="text-sm font-semibold text-blue-500">ETA: ${order.eta}</p>
+                        </div>
+                    </div>
+                    ${notesHtml}
+                `;
+                
+                const statusButton = document.createElement('button');
+                statusButton.className = `mt-4 w-full py-2 px-4 rounded-xl font-bold transition-colors duration-200 bg-green-500 hover:bg-green-600 text-white`;
+                statusButton.textContent = 'Completato';
+                statusButton.addEventListener('click', async () => {
+                    try {
+                        const orderDocRef = doc(db, `artifacts/${appId}/users/${syncedId}/orders`, order.id);
+                        await deleteDoc(orderDocRef);
+                    } catch (e) {
+                        console.error("Error deleting document: ", e);
+                    }
+                });
+                li.appendChild(statusButton);
+                
+                return li;
+            };
+
+            const startListeningForOrders = () => {
+                if (syncedId) {
+                    const ordersCollectionRef = collection(db, `artifacts/${appId}/users/${syncedId}/orders`);
+                    const q = query(ordersCollectionRef);
+                    
+                    onSnapshot(q, (querySnapshot) => {
+                        querySnapshot.docChanges().forEach((change) => {
+                            if (change.type === "added") {
+                                try {
+                                    newOrderSound.play();
+                                } catch (e) {
+                                    console.warn("Audio playback failed:", e);
+                                }
+                            }
+                        });
+                        
+                        const orders = [];
+                        querySnapshot.forEach((doc) => {
+                            orders.push({ id: doc.id, ...doc.data() });
+                        });
+                        
+                        renderOrders(orders, ordersListCucina);
+                        orderCount.textContent = orders.length;
+                    });
+                }
+            };
+            
+            const syncDocRef = doc(db, `artifacts/${appId}/sync/main`);
+            onSnapshot(syncDocRef, (docSnap) => {
+                if (docSnap.exists() && docSnap.data().syncedId) {
+                    syncedId = docSnap.data().syncedId;
+                    startListeningForOrders();
+                    syncContainer.classList.add('hidden');
+                }
+            });
+        };
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            transition: all 0.3s ease-in-out;
+        }
+        .container {
+            max-width: 960px;
+            margin: auto;
+            padding: 1rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col min-h-screen">
+    <main class="flex-grow container mt-8">
+        <div id="orderContainer" class="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
+            <h1 class="text-2xl font-bold text-gray-800 mb-6 text-center">Schermo Cucina</h1>
+            <div id="syncContainer" class="my-4 p-4 rounded-xl bg-gray-50 border border-gray-200">
+                <label for="syncIdInput" class="block text-sm font-medium text-gray-700 mb-2">Incolla l'ID Utente della Sala:</label>
+                <input type="text" id="syncIdInput" class="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Copia l'ID della sala qui...">
+                <p id="syncIdStatus" class="mt-2 text-center text-sm font-medium text-gray-500"></p>
+            </div>
+            <p class="text-sm italic text-gray-600 mb-4 text-center">Ordini in arrivo: <span id="orderCount">0</span></p>
+            <ul id="ordersListCucina" class="space-y-4"></ul>
+        </div>
+    </main>
+    <footer class="text-center text-gray-500 text-sm py-4">
+        <p>ID Utente: <span id="user-id" class="font-mono text-gray-800"></span></p>
+    </footer>
+</body>
+  </html>
