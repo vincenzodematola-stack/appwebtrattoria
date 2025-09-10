@@ -3,339 +3,270 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Il Cuoco Volante</title>
+    <title>App Ordini Cucina</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
         }
-        .order-card {
-            transition: transform 0.2s, box-shadow 0.2s;
+        .container {
+            max-width: 600px;
+            margin: 2rem auto;
+            padding: 2rem;
             background-color: #ffffff;
             border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .order-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
         }
         .order-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
-        }
-        .card-header {
-            background-color: #1f2937;
-            color: #ffffff;
-            border-top-left-radius: 12px;
-            border-top-right-radius: 12px;
-        }
-        .add-button {
-            transition: background-color 0.3s;
-        }
-        .add-button:hover {
-            background-color: #4b5563;
-        }
-        .delete-button, .complete-button {
-            transition: transform 0.2s;
-        }
-        .delete-button:hover, .complete-button:hover {
-            transform: scale(1.1);
-        }
-        .dialog {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: white;
-            padding: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-            z-index: 1000;
-            max-width: 90%;
-            width: 400px;
-        }
-        .overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            z-index: 999;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
-<body class="bg-gray-100 flex flex-col min-h-screen">
+<body>
 
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, onSnapshot, collection, addDoc, deleteDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+<div class="container flex flex-col items-center">
+    <h1 class="text-3xl font-bold text-gray-800 mb-6">Ordini per la Cucina</h1>
 
-        // Firebase configuration and initialization
-        setLogLevel('Debug');
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-
-        if (Object.keys(firebaseConfig).length === 0) {
-            console.error('Firebase configuration is missing.');
-        }
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        let userId = null;
-        let orderCollection = null;
-
-        const connectToFirebase = async () => {
-            try {
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Firebase Auth Error:", error);
-            }
-        };
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                userId = user.uid;
-                // Use a public collection for orders to make them visible to all users
-                orderCollection = collection(db, `artifacts/${appId}/public/data/orders`);
-                document.getElementById('userIdDisplay').textContent = `ID Utente: ${userId}`;
-                setupRealtimeListener();
-            } else {
-                console.log("User is signed out.");
-                userId = null;
-                document.getElementById('userIdDisplay').textContent = '';
-                // Clear orders display if user is signed out
-                document.getElementById('ordersContainer').innerHTML = '';
-            }
-        });
-
-        connectToFirebase();
-
-        const setupRealtimeListener = () => {
-            if (!orderCollection) return;
-
-            // Listen for real-time updates on the orders collection
-            onSnapshot(orderCollection, (snapshot) => {
-                const orders = [];
-                snapshot.forEach(doc => {
-                    orders.push({ id: doc.id, ...doc.data() });
-                });
-                renderOrders(orders);
-            }, (error) => {
-                console.error("Error listening to orders:", error);
-                showMessage('Errore durante l\'ascolto degli ordini.');
-            });
-        };
-
-        window.addOrder = async (event) => {
-            event.preventDefault();
-            const piatto = document.getElementById('piattoInput').value.trim();
-            const quantita = document.getElementById('quantitaInput').value;
-            const ora = document.getElementById('oraInput').value.trim();
-            const nomeCuoca = document.getElementById('cuocaInput').value.trim();
-
-            if (!piatto || !quantita || !ora || !nomeCuoca) {
-                showMessage('Per favore, compila tutti i campi.');
-                return;
-            }
-
-            try {
-                await addDoc(orderCollection, {
-                    piatto,
-                    quantita: parseInt(quantita, 10),
-                    ora,
-                    nomeCuoca,
-                    timestamp: serverTimestamp(),
-                    isCompleted: false
-                });
-
-                document.getElementById('piattoInput').value = '';
-                document.getElementById('quantitaInput').value = '';
-                document.getElementById('oraInput').value = '';
-                document.getElementById('cuocaInput').value = '';
-                
-                closeModal();
-                showMessage('Ordine aggiunto con successo!');
-
-            } catch (e) {
-                console.error("Error adding document: ", e);
-                showMessage('Errore durante l\'aggiunta dell\'ordine.');
-            }
-        };
-
-        window.deleteOrder = async (orderId) => {
-            if (!orderCollection) return;
-            try {
-                await deleteDoc(doc(orderCollection, orderId));
-                showMessage('Ordine eliminato con successo.');
-            } catch (e) {
-                console.error("Error removing document: ", e);
-                showMessage('Errore durante l\'eliminazione dell\'ordine.');
-            }
-        };
-
-        window.toggleComplete = async (orderId, isCompleted) => {
-            if (!orderCollection) return;
-            try {
-                await updateDoc(doc(orderCollection, orderId), {
-                    isCompleted: !isCompleted
-                });
-            } catch (e) {
-                console.error("Error updating document: ", e);
-                showMessage('Errore durante l\'aggiornamento dell\'ordine.');
-            }
-        };
-
-        function renderOrders(orders) {
-            const container = document.getElementById('ordersContainer');
-            container.innerHTML = ''; // Clear existing orders
-
-            // Sort orders by completion status and then by time
-            const sortedOrders = orders.sort((a, b) => {
-                if (a.isCompleted && !b.isCompleted) return 1;
-                if (!a.isCompleted && b.isCompleted) return -1;
-                return a.ora.localeCompare(b.ora);
-            });
-
-            if (sortedOrders.length === 0) {
-                container.innerHTML = '<p class="text-center text-gray-500 text-lg mt-8">Nessun ordine in arrivo. Tempo di pausa!</p>';
-                return;
-            }
-
-            sortedOrders.forEach(order => {
-                const orderCard = document.createElement('div');
-                orderCard.className = `order-card p-6 mb-4 flex flex-col md:flex-row justify-between items-center ${order.isCompleted ? 'bg-green-100' : 'bg-gray-50'} border-l-4 ${order.isCompleted ? 'border-green-500' : 'border-blue-500'}`;
-                orderCard.innerHTML = `
-                    <div class="flex-1 mb-4 md:mb-0">
-                        <div class="text-lg font-semibold text-gray-800">${order.nomeCuoca}</div>
-                        <div class="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                            ${getIconForDish(order.piatto)}
-                            <span>${order.quantita} x ${order.piatto}</span>
-                        </div>
-                        <div class="text-gray-600">Da preparare per le: <span class="font-bold">${order.ora}</span></div>
-                    </div>
-                    <div class="flex items-center space-x-4">
-                        <button onclick="toggleComplete('${order.id}', ${order.isCompleted})" class="complete-button text-white rounded-full p-3 focus:outline-none ${order.isCompleted ? 'bg-blue-500 hover:bg-blue-600' : 'bg-green-500 hover:bg-green-600'}">
-                            <i class="fas fa-check"></i>
-                        </button>
-                        <button onclick="deleteOrder('${order.id}')" class="delete-button bg-red-500 text-white rounded-full p-3 hover:bg-red-600 focus:outline-none">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                `;
-                container.appendChild(orderCard);
-            });
-        }
-
-        function getIconForDish(dish) {
-            const lowerDish = dish.toLowerCase();
-            if (lowerDish.includes('pasta')) return '<i class="fas fa-bowl-rice"></i>';
-            if (lowerDish.includes('patate')) return '<i class="fas fa-potato-fries"></i>';
-            if (lowerDish.includes('carne')) return '<i class="fas fa-drumstick-bite"></i>';
-            if (lowerDish.includes('pesce')) return '<i class="fas fa-fish"></i>';
-            if (lowerDish.includes('verdura')) return '<i class="fas fa-carrot"></i>';
-            if (lowerDish.includes('pizza')) return '<i class="fas fa-pizza-slice"></i>';
-            return '<i class="fas fa-utensils"></i>';
-        }
-
-        window.openModal = () => {
-            document.getElementById('addOrderDialog').style.display = 'block';
-            document.getElementById('overlay').style.display = 'block';
-        };
-
-        window.closeModal = () => {
-            document.getElementById('addOrderDialog').style.display = 'none';
-            document.getElementById('overlay').style.display = 'none';
-        };
-
-        function showMessage(message) {
-            const messageBox = document.getElementById('messageBox');
-            messageBox.textContent = message;
-            messageBox.classList.remove('opacity-0', 'scale-95', 'hidden');
-            messageBox.classList.add('opacity-100', 'scale-100', 'block');
-            setTimeout(() => {
-                messageBox.classList.remove('opacity-100', 'scale-100');
-                messageBox.classList.add('opacity-0', 'scale-95');
-                setTimeout(() => {
-                    messageBox.classList.add('hidden');
-                }, 300);
-            }, 3000);
-        }
-    </script>
-
-    <!-- UI -->
-    <header class="bg-gray-900 text-white p-4 shadow-lg sticky top-0 z-50">
-        <div class="container mx-auto flex justify-between items-center">
-            <h1 class="text-2xl font-bold flex items-center gap-2">
-                <i class="fas fa-cookie-bite text-yellow-500"></i>
-                Il Cuoco Volante
-            </h1>
-            <div id="userIdDisplay" class="text-sm text-gray-400"></div>
+    <!-- Form per l'inserimento degli ordini -->
+    <div class="w-full flex flex-col space-y-4">
+        <!-- Contenitore per le pietanze multiple -->
+        <div id="dishesContainer" class="flex flex-col space-y-2">
+            <div class="flex space-x-2">
+                <input type="text" placeholder="Piatto (es. Pasta e fagioli)" class="dish-input w-2/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                <input type="number" placeholder="Quantità" value="1" min="1" class="quantity-input w-1/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+            </div>
         </div>
-    </header>
+        <button id="addDishButton" class="w-full bg-gray-200 text-gray-700 font-semibold py-2 rounded-md hover:bg-gray-300 transition duration-200">
+            Aggiungi un'altra Pietanza
+        </button>
 
-    <main class="container mx-auto p-4 flex-1">
-        <div class="flex justify-end mb-4">
-            <button onclick="openModal()" class="add-button bg-gray-700 text-white font-bold py-2 px-4 rounded-full shadow-lg flex items-center gap-2">
-                <i class="fas fa-plus"></i>
-                Aggiungi Ordine
-            </button>
-        </div>
-
-        <div id="ordersContainer" class="grid gap-4">
-            <!-- Orders will be rendered here dynamically -->
-        </div>
-
-        <!-- Floating message box -->
-        <div id="messageBox" class="fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg opacity-0 scale-95 transition-all duration-300 hidden">
-            Messaggio di esempio
-        </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="bg-gray-900 text-white text-center p-4 mt-auto">
-        <p class="text-sm">App sviluppata da Gemini per la tua trattoria.</p>
-    </footer>
-
-    <!-- Modal Dialog for adding order -->
-    <div id="overlay" class="overlay" onclick="closeModal()"></div>
-    <div id="addOrderDialog" class="dialog">
-        <h2 class="text-xl font-bold mb-4 text-gray-800">Aggiungi un nuovo ordine</h2>
-        <form onsubmit="addOrder(event)">
-            <div class="mb-4">
-                <label for="cuocaInput" class="block text-gray-700 font-bold mb-2">Nome della Cuoca:</label>
-                <input type="text" id="cuocaInput" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            </div>
-            <div class="mb-4">
-                <label for="piattoInput" class="block text-gray-700 font-bold mb-2">Piatto:</label>
-                <input type="text" id="piattoInput" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            </div>
-            <div class="mb-4">
-                <label for="quantitaInput" class="block text-gray-700 font-bold mb-2">Quantità:</label>
-                <input type="number" id="quantitaInput" required min="1" class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            </div>
-            <div class="mb-6">
-                <label for="oraInput" class="block text-gray-700 font-bold mb-2">Ora di consegna:</label>
-                <input type="time" id="oraInput" required class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-            </div>
-            <div class="flex items-center justify-between">
-                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                    Aggiungi
-                </button>
-                <button type="button" onclick="closeModal()" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline">
-                    Annulla
-                </button>
-            </div>
-        </form>
+        <input type="text" id="timeInput" placeholder="Orario (es. 12:30)" class="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+        <button id="addButton" class="w-full bg-blue-600 text-white font-semibold py-2 rounded-md hover:bg-blue-700 transition duration-200 shadow-md">
+            Aggiungi Ordine Completo
+        </button>
     </div>
+
+    <hr class="w-full my-6 border-t border-gray-200">
+
+    <!-- Lista degli ordini -->
+    <div class="w-full">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">Lista Ordini</h2>
+        <ul id="orderList" class="space-y-4">
+            <!-- Gli ordini verranno aggiunti qui dinamicamente -->
+        </ul>
+        <p id="emptyMessage" class="text-center text-gray-500 mt-8" style="display: none;">Nessun ordine presente. Aggiungine uno!</p>
+    </div>
+
+</div>
+
+<script>
+    // Recupera gli elementi DOM
+    const dishesContainer = document.getElementById('dishesContainer');
+    const addDishButton = document.getElementById('addDishButton');
+    const timeInput = document.getElementById('timeInput');
+    const addButton = document.getElementById('addButton');
+    const orderList = document.getElementById('orderList');
+    const emptyMessage = document.getElementById('emptyMessage');
+
+    // Funzione per salvare gli ordini
+    const saveOrders = (orders) => {
+        localStorage.setItem('kitchenOrders', JSON.stringify(orders));
+        renderOrders();
+    };
+
+    // Funzione per caricare gli ordini
+    const loadOrders = () => {
+        const ordersString = localStorage.getItem('kitchenOrders');
+        return ordersString ? JSON.parse(ordersString) : [];
+    };
+
+    // Funzione per il rendering degli ordini
+    const renderOrders = () => {
+        const orders = loadOrders();
+        orderList.innerHTML = '';
+        if (orders.length === 0) {
+            emptyMessage.style.display = 'block';
+        } else {
+            emptyMessage.style.display = 'none';
+            orders.forEach((order, index) => {
+                const li = document.createElement('li');
+                li.className = `order-card bg-gray-50`;
+                
+                const orderText = document.createElement('div');
+                let dishesHtml = '';
+                order.dishes.forEach(dish => {
+                    if (dish.name) {
+                        dishesHtml += `<p class="font-medium text-gray-800">${dish.quantity} x ${dish.name}</p>`;
+                    }
+                });
+
+                orderText.innerHTML = `
+                    <div>${dishesHtml}</div>
+                    <p class="text-sm text-gray-500 mt-1">per le ore: ${order.time}</p>
+                `;
+                li.appendChild(orderText);
+                
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'flex space-x-2';
+
+                // Pulsante "Cancella"
+                const deleteButton = document.createElement('button');
+                deleteButton.className = 'p-2 rounded-full bg-red-500 text-white hover:bg-red-600';
+                deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 11-2 0v6a1 1 0 112 0V8z" clip-rule="evenodd" />
+                                        </svg>`;
+                deleteButton.onclick = () => {
+                    orders.splice(index, 1);
+                    saveOrders(orders);
+                };
+                actionsDiv.appendChild(deleteButton);
+
+                li.appendChild(actionsDiv);
+                orderList.appendChild(li);
+            });
+        }
+    };
+
+    // Funzione per riprodurre un suono di notifica più "distinto"
+    const playNotificationSound = () => {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioContext.currentTime;
+            
+            // Frequenze per un suono più profondo
+            const frequency1 = 300; 
+            const frequency2 = 400; 
+
+            // Nodo del guadagno per controllare il volume e la durata
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.7, now + 0.1);
+            gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+
+            // Oscillatore 1
+            const oscillator1 = audioContext.createOscillator();
+            oscillator1.type = 'sawtooth';
+            oscillator1.frequency.setValueAtTime(frequency1, now);
+            
+            // Oscillatore 2 per un effetto più ricco
+            const oscillator2 = audioContext.createOscillator();
+            oscillator2.type = 'sine';
+            oscillator2.frequency.setValueAtTime(frequency2, now);
+            
+            // Connessioni
+            oscillator1.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            // Avvio e arresto
+            oscillator1.start(now);
+            oscillator1.stop(now + 0.5);
+            oscillator2.start(now);
+            oscillator2.stop(now + 0.5);
+
+        } catch (e) {
+            console.error("Errore nella riproduzione del suono:", e);
+        }
+    };
+
+    // Aggiungi un nuovo set di campi per una pietanza
+    addDishButton.addEventListener('click', () => {
+        const newDishDiv = document.createElement('div');
+        newDishDiv.className = 'flex space-x-2';
+        newDishDiv.innerHTML = `
+            <input type="text" placeholder="Piatto" class="dish-input w-2/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+            <input type="number" placeholder="Quantità" value="1" min="1" class="quantity-input w-1/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+        `;
+        dishesContainer.appendChild(newDishDiv);
+    });
+
+    // Aggiungi un nuovo ordine completo
+    const addOrder = () => {
+        const dishInputs = document.querySelectorAll('.dish-input');
+        const quantityInputs = document.querySelectorAll('.quantity-input');
+        const time = timeInput.value.trim();
+
+        const dishes = [];
+        let isValid = true;
+        
+        for (let i = 0; i < dishInputs.length; i++) {
+            const dish = dishInputs[i].value.trim();
+            const quantity = parseInt(quantityInputs[i].value, 10);
+            
+            if (dish && quantity > 0) {
+                dishes.push({ name: dish, quantity: quantity });
+            } else if (dishInputs.length === 1 && !dish) {
+                isValid = false;
+                break;
+            } else if (dish && quantity <= 0) {
+                 isValid = false;
+                 showCustomMessage('La quantità deve essere maggiore di 0.');
+                 return;
+            }
+        }
+
+        if (dishes.length > 0 && time && isValid) {
+            const orders = loadOrders();
+            const newOrder = { dishes, time, done: false };
+            orders.push(newOrder);
+            saveOrders(orders);
+            
+            playNotificationSound(); 
+            
+            dishesContainer.innerHTML = `
+                <div class="flex space-x-2">
+                    <input type="text" placeholder="Piatto (es. Pasta e fagioli)" class="dish-input w-2/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                    <input type="number" placeholder="Quantità" value="1" min="1" class="quantity-input w-1/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                </div>
+            `;
+            timeInput.value = '';
+        } else if (!time) {
+            showCustomMessage('Per favore, inserisci l\'orario.');
+        } else {
+            showCustomMessage('Per favore, aggiungi almeno una pietanza.');
+        }
+    };
+
+    // Funzione per visualizzare un messaggio personalizzato
+    const showCustomMessage = (message) => {
+        const existingMessage = document.getElementById('custom-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.id = 'custom-message';
+        messageDiv.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white px-6 py-4 rounded-md shadow-lg z-50 text-center transition-all duration-300 transform scale-0 opacity-0';
+        messageDiv.textContent = message;
+        document.body.appendChild(messageDiv);
+
+        setTimeout(() => {
+            messageDiv.classList.add('scale-100', 'opacity-100');
+        }, 10);
+
+        setTimeout(() => {
+            messageDiv.classList.remove('scale-100', 'opacity-100');
+            setTimeout(() => messageDiv.remove(), 300);
+        }, 3000);
+    };
+
+    // Event listeners
+    addButton.addEventListener('click', addOrder);
+    document.addEventListener('DOMContentLoaded', renderOrders);
+</script>
+
 </body>
 </html>
+
