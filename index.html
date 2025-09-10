@@ -100,9 +100,16 @@
     const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
     // Inizializza Firebase
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
+    let app, auth, db;
+    let authIsReady = false;
+
+    try {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+    } catch (e) {
+        console.error("Errore nell'inizializzazione di Firebase:", e);
+    }
 
     // Variabili per gli elementi DOM
     const dishesContainer = document.getElementById('dishesContainer');
@@ -142,6 +149,26 @@
             console.error("Errore nella riproduzione del suono:", e);
         }
     };
+    
+    // Funzione per visualizzare un messaggio personalizzato
+    const showCustomMessage = (message) => {
+        const existingMessage = document.getElementById('custom-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+        const messageDiv = document.createElement('div');
+        messageDiv.id = 'custom-message';
+        messageDiv.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white px-6 py-4 rounded-md shadow-lg z-50 text-center transition-all duration-300 transform scale-0 opacity-0';
+        messageDiv.textContent = message;
+        document.body.appendChild(messageDiv);
+        setTimeout(() => {
+            messageDiv.classList.add('scale-100', 'opacity-100');
+        }, 10);
+        setTimeout(() => {
+            messageDiv.classList.remove('scale-100', 'opacity-100');
+            setTimeout(() => messageDiv.remove(), 300);
+        }, 3000);
+    };
 
     // Gestione dello stato di autenticazione
     onAuthStateChanged(auth, async (user) => {
@@ -157,7 +184,8 @@
             if (auth.currentUser) {
                 const userId = auth.currentUser.uid;
                 userIdDisplay.textContent = `Il tuo ID: ${userId}`;
-    
+                authIsReady = true;
+
                 const ordersCollection = collection(db, `artifacts/${appId}/public/data/kitchen_orders`);
                 
                 const q = query(ordersCollection, orderBy('createdAt', 'desc'));
@@ -247,6 +275,11 @@
 
     // Aggiungi un nuovo ordine completo al database
     const addOrder = async () => {
+        if (!authIsReady) {
+            showCustomMessage("L'app non è ancora pronta. Attendi qualche istante.");
+            return;
+        }
+
         const dishInputs = document.querySelectorAll('.dish-input');
         const quantityInputs = document.querySelectorAll('.quantity-input');
         const time = timeInput.value.trim();
@@ -298,28 +331,21 @@
         }
     };
 
-    const showCustomMessage = (message) => {
-        const existingMessage = document.getElementById('custom-message');
-        if (existingMessage) {
-            existingMessage.remove();
-        }
-        const messageDiv = document.createElement('div');
-        messageDiv.id = 'custom-message';
-        messageDiv.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white px-6 py-4 rounded-md shadow-lg z-50 text-center transition-all duration-300 transform scale-0 opacity-0';
-        messageDiv.textContent = message;
-        document.body.appendChild(messageDiv);
-        setTimeout(() => {
-            messageDiv.classList.add('scale-100', 'opacity-100');
-        }, 10);
-        setTimeout(() => {
-            messageDiv.classList.remove('scale-100', 'opacity-100');
-            setTimeout(() => messageDiv.remove(), 300);
-        }, 3000);
-    };
-
     addButton.addEventListener('click', addOrder);
+
+    // Gestione del timeout di caricamento per sicurezza
+    setTimeout(() => {
+        if (loadingOverlay.style.display !== 'none') {
+            loadingOverlay.style.display = 'none';
+            if (!authIsReady) {
+                showCustomMessage("Errore di connessione. Riprova.");
+            }
+        }
+    }, 5000); 
+
 </script>
 
 </body>
 </html>
 
+    
