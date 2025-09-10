@@ -32,30 +32,13 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
-        .loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
     </style>
 </head>
-<body>
-
-<div id="loading-overlay" class="loading-overlay">
-    <div class="text-xl font-semibold text-gray-700">Caricamento...</div>
-</div>
+<body onload="initApp()">
 
 <div class="container flex flex-col items-center">
     <h1 class="text-3xl font-bold text-gray-800 mb-2">Ordini per la Cucina</h1>
-    <p id="userIdDisplay" class="text-sm text-gray-500 mb-6"></p>
-
+    
     <!-- Form per l'inserimento degli ordini -->
     <div class="w-full flex flex-col space-y-4">
         <!-- Contenitore per le pietanze multiple -->
@@ -85,22 +68,13 @@
         </ul>
         <p id="emptyMessage" class="text-center text-gray-500 mt-8" style="display: none;">Nessun ordine presente. Aggiungine uno!</p>
     </div>
-
+    
+    <button id="clearAllButton" class="w-full mt-6 bg-red-600 text-white font-semibold py-2 rounded-md hover:bg-red-700 transition duration-200 shadow-md">
+        Cancella Tutti gli Ordini
+    </button>
 </div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, orderBy, query, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-    // Variabili globali fornite dall'ambiente
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-    const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-    let app, auth, db;
-    let authIsReady = false;
-
+<script>
     // Elementi DOM
     const dishesContainer = document.getElementById('dishesContainer');
     const addDishButton = document.getElementById('addDishButton');
@@ -108,10 +82,9 @@
     const addButton = document.getElementById('addButton');
     const orderList = document.getElementById('orderList');
     const emptyMessage = document.getElementById('emptyMessage');
-    const loadingOverlay = document.getElementById('loading-overlay');
-    const userIdDisplay = document.getElementById('userIdDisplay');
-
-    // Funzione per visualizzare messaggi personalizzati (al posto di alert)
+    const clearAllButton = document.getElementById('clearAllButton');
+    
+    // Funzione per visualizzare messaggi personalizzati
     const showCustomMessage = (message, isError = true) => {
         const existingMessage = document.getElementById('custom-message');
         if (existingMessage) {
@@ -161,61 +134,9 @@
         }
     };
 
-    // Inizializzazione Firebase e gestione autenticazione
-    const initializeFirebase = async () => {
-        try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-
-            // Imposta un listener per l'autenticazione per gestire lo stato dell'utente
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    const userId = user.uid;
-                    userIdDisplay.textContent = `Il tuo ID: ${userId}`;
-                    authIsReady = true;
-
-                    const ordersCollection = collection(db, `artifacts/${appId}/public/data/kitchen_orders`);
-                    const q = query(ordersCollection, orderBy('createdAt', 'desc'));
-                    
-                    onSnapshot(q, (snapshot) => {
-                        const orders = [];
-                        snapshot.forEach(doc => {
-                            orders.push({ id: doc.id, ...doc.data() });
-                        });
-                        renderOrders(orders);
-                        loadingOverlay.style.display = 'none';
-                    }, (error) => {
-                        console.error("Errore di sincronizzazione:", error);
-                        loadingOverlay.style.display = 'none';
-                        showCustomMessage('Errore: Sincronizzazione fallita. Ricarica la pagina.', true);
-                    });
-                } else {
-                    // Se l'utente non è autenticato, tenta di autenticarlo
-                    try {
-                        if (authToken) {
-                            await signInWithCustomToken(auth, authToken);
-                        } else {
-                            await signInAnonymously(auth);
-                        }
-                    } catch (error) {
-                        console.error("Autenticazione fallita:", error);
-                        userIdDisplay.textContent = 'Autenticazione fallita. Riprova.';
-                        loadingOverlay.style.display = 'none';
-                        showCustomMessage('Errore: Impossibile autenticarsi. Ricarica la pagina.', true);
-                    }
-                }
-            });
-        } catch (error) {
-            console.error("Errore fatale nell'inizializzazione dell'app:", error);
-            userIdDisplay.textContent = 'Errore di avvio. Controlla la console per i dettagli.';
-            showCustomMessage('Errore: Impossibile connettersi ai servizi. Riprova più tardi.', true);
-            loadingOverlay.style.display = 'none';
-        }
-    };
-
     // Funzione per il rendering degli ordini
-    const renderOrders = (orders) => {
+    const renderOrders = () => {
+        const orders = JSON.parse(localStorage.getItem('kitchen_orders') || '[]');
         orderList.innerHTML = '';
         if (orders.length === 0) {
             emptyMessage.style.display = 'block';
@@ -248,20 +169,8 @@
                 deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                             <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 11-2 0v6a1 1 0 112 0V8z" clip-rule="evenodd" />
                                         </svg>`;
-                deleteButton.onclick = async () => {
-                    if (!db) {
-                        console.error("Database non disponibile.");
-                        showCustomMessage("Errore: Impossibile connettersi al database.", true);
-                        return;
-                    }
-                    try {
-                        const orderDocRef = doc(db, `artifacts/${appId}/public/data/kitchen_orders`, order.id);
-                        await deleteDoc(orderDocRef);
-                        showCustomMessage("Ordine cancellato con successo!", false);
-                    } catch (e) {
-                        console.error("Errore durante la cancellazione dell'ordine:", e);
-                        showCustomMessage("Errore: Impossibile cancellare l'ordine. Riprova.", true);
-                    }
+                deleteButton.onclick = () => {
+                    deleteOrder(order.createdAt);
                 };
                 actionsDiv.appendChild(deleteButton);
 
@@ -282,13 +191,8 @@
         dishesContainer.appendChild(newDishDiv);
     });
 
-    // Aggiungi un nuovo ordine completo al database
-    const addOrder = async () => {
-        if (!authIsReady) {
-            showCustomMessage("L'app non è ancora pronta. Attendi qualche istante.", true);
-            return;
-        }
-
+    // Aggiungi un nuovo ordine completo
+    const addOrder = () => {
         const dishInputs = document.querySelectorAll('.dish-input');
         const quantityInputs = document.querySelectorAll('.quantity-input');
         const time = timeInput.value.trim();
@@ -312,27 +216,25 @@
         }
 
         if (dishes.length > 0 && time && isValid) {
-            try {
-                const newOrder = { 
-                    dishes, 
-                    time, 
-                    createdAt: new Date().toISOString()
-                };
-                await addDoc(collection(db, `artifacts/${appId}/public/data/kitchen_orders`), newOrder);
-                
-                playNotificationSound(); 
-                
-                dishesContainer.innerHTML = `
-                    <div class="flex space-x-2">
-                        <input type="text" placeholder="Piatto (es. Pasta e fagioli)" class="dish-input w-2/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
-                        <input type="number" placeholder="Quantità" value="1" min="1" class="quantity-input w-1/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
-                    </div>
-                `;
-                timeInput.value = '';
-            } catch (e) {
-                console.error("Errore nell'aggiunta dell'ordine al database:", e);
-                showCustomMessage("Errore: Impossibile aggiungere l'ordine. Riprova.", true);
-            }
+            const newOrder = { 
+                dishes, 
+                time, 
+                createdAt: new Date().toISOString()
+            };
+            const orders = JSON.parse(localStorage.getItem('kitchen_orders') || '[]');
+            orders.unshift(newOrder); // Aggiungi in cima alla lista
+            localStorage.setItem('kitchen_orders', JSON.stringify(orders));
+            
+            playNotificationSound(); 
+            renderOrders();
+            
+            dishesContainer.innerHTML = `
+                <div class="flex space-x-2">
+                    <input type="text" placeholder="Piatto (es. Pasta e fagioli)" class="dish-input w-2/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                    <input type="number" placeholder="Quantità" value="1" min="1" class="quantity-input w-1/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                </div>
+            `;
+            timeInput.value = '';
         } else if (!time) {
             showCustomMessage('Per favore, inserisci l\'orario.', true);
         } else {
@@ -340,10 +242,29 @@
         }
     };
 
-    addButton.addEventListener('click', addOrder);
+    // Funzione per eliminare un ordine
+    const deleteOrder = (timestamp) => {
+        let orders = JSON.parse(localStorage.getItem('kitchen_orders') || '[]');
+        orders = orders.filter(order => order.createdAt !== timestamp);
+        localStorage.setItem('kitchen_orders', JSON.stringify(orders));
+        renderOrders();
+        showCustomMessage("Ordine cancellato con successo!", false);
+    };
 
-    // Avvia l'inizializzazione dell'app all'inizio
-    initializeFirebase();
+    // Funzione per cancellare tutti gli ordini
+    const clearAllOrders = () => {
+        localStorage.removeItem('kitchen_orders');
+        renderOrders();
+        showCustomMessage("Tutti gli ordini sono stati cancellati!", false);
+    };
+
+    // Inizializza l'app caricando gli ordini
+    const initApp = () => {
+        renderOrders();
+    };
+
+    addButton.addEventListener('click', addOrder);
+    clearAllButton.addEventListener('click', clearAllOrders);
 
 </script>
 
