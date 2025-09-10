@@ -147,7 +147,6 @@
     onAuthStateChanged(auth, async (user) => {
         try {
             if (!user) {
-                // Tentativo di autenticazione anonima o con token
                 if (authToken) {
                     await signInWithCustomToken(auth, authToken);
                 } else {
@@ -155,15 +154,12 @@
                 }
             }
             
-            // Se l'utente è autenticato o l'autenticazione è appena riuscita
             if (auth.currentUser) {
                 const userId = auth.currentUser.uid;
                 userIdDisplay.textContent = `Il tuo ID: ${userId}`;
     
-                // Collezione Firestore per gli ordini condivisi
                 const ordersCollection = collection(db, `artifacts/${appId}/public/data/kitchen_orders`);
                 
-                // Abilita la sincronizzazione in tempo reale con onSnapshot
                 const q = query(ordersCollection, orderBy('createdAt', 'desc'));
                 onSnapshot(q, (snapshot) => {
                     const orders = [];
@@ -173,14 +169,12 @@
                     renderOrders(orders);
                 });
             } else {
-                // L'autenticazione non ha funzionato, mostra un errore
                 userIdDisplay.textContent = 'Errore di autenticazione. Riprova.';
             }
         } catch (error) {
             console.error("Errore durante l'autenticazione:", error);
             userIdDisplay.textContent = 'Errore di connessione. Riprova più tardi.';
         } finally {
-            // Nascondi l'overlay di caricamento in ogni caso
             loadingOverlay.style.display = 'none';
         }
     });
@@ -220,7 +214,6 @@
                                             <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 11-2 0v6a1 1 0 112 0V8z" clip-rule="evenodd" />
                                         </svg>`;
                 deleteButton.onclick = async () => {
-                    // Controlla che il database sia disponibile prima di tentare la cancellazione
                     if (!db) {
                         console.error("Database non disponibile.");
                         return;
@@ -278,17 +271,15 @@
 
         if (dishes.length > 0 && time && isValid) {
             try {
-                // Aggiungi un nuovo documento alla collezione di Firestore
                 const newOrder = { 
                     dishes, 
                     time, 
-                    createdAt: new Date().toISOString() // Aggiungiamo un timestamp per l'ordinamento
+                    createdAt: new Date().toISOString()
                 };
                 await addDoc(collection(db, `artifacts/${appId}/public/data/kitchen_orders`), newOrder);
                 
                 playNotificationSound(); 
                 
-                // Pulisci i campi dopo l'invio
                 dishesContainer.innerHTML = `
                     <div class="flex space-x-2">
                         <input type="text" placeholder="Piatto (es. Pasta e fagioli)" class="dish-input w-2/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
@@ -307,7 +298,6 @@
         }
     };
 
-    // Funzione per visualizzare un messaggio personalizzato
     const showCustomMessage = (message) => {
         const existingMessage = document.getElementById('custom-message');
         if (existingMessage) {
@@ -327,7 +317,6 @@
         }, 3000);
     };
 
-    // Event listener per aggiungere un ordine
     addButton.addEventListener('click', addOrder);
 </script>
 
