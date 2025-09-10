@@ -92,7 +92,7 @@
     // Importa le librerie Firebase
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, orderBy, query, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // Variabili globali fornite dall'ambiente
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -145,34 +145,43 @@
 
     // Gestione dello stato di autenticazione
     onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            // Utente autenticato, nascondi l'overlay di caricamento
-            loadingOverlay.style.display = 'none';
-            const userId = user.uid;
-            userIdDisplay.textContent = `Il tuo ID: ${userId}`;
-
-            // Collezione Firestore per gli ordini condivisi
-            const ordersCollection = collection(db, `artifacts/${appId}/public/data/kitchen_orders`);
-            
-            // Abilita la sincronizzazione in tempo reale con onSnapshot
-            // Ordiniamo per data di creazione per mantenere la coerenza
-            const q = query(ordersCollection, orderBy('createdAt', 'desc'));
-            onSnapshot(q, (snapshot) => {
-                const orders = [];
-                snapshot.forEach(doc => {
-                    orders.push({ id: doc.id, ...doc.data() });
-                });
-                renderOrders(orders);
-            });
-        } else {
-            // Se non c'è un token, esegui l'accesso anonimo
-            try {
-                await (authToken ? signInWithCustomToken(auth, authToken) : signInAnonymously(auth));
-            } catch (error) {
-                console.error("Errore durante l'autenticazione:", error);
-                loadingOverlay.style.display = 'none';
-                userIdDisplay.textContent = 'Errore di connessione.';
+        try {
+            if (!user) {
+                // Tentativo di autenticazione anonima o con token
+                if (authToken) {
+                    await signInWithCustomToken(auth, authToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
             }
+            
+            // Se l'utente è autenticato o l'autenticazione è appena riuscita
+            if (auth.currentUser) {
+                const userId = auth.currentUser.uid;
+                userIdDisplay.textContent = `Il tuo ID: ${userId}`;
+    
+                // Collezione Firestore per gli ordini condivisi
+                const ordersCollection = collection(db, `artifacts/${appId}/public/data/kitchen_orders`);
+                
+                // Abilita la sincronizzazione in tempo reale con onSnapshot
+                const q = query(ordersCollection, orderBy('createdAt', 'desc'));
+                onSnapshot(q, (snapshot) => {
+                    const orders = [];
+                    snapshot.forEach(doc => {
+                        orders.push({ id: doc.id, ...doc.data() });
+                    });
+                    renderOrders(orders);
+                });
+            } else {
+                // L'autenticazione non ha funzionato, mostra un errore
+                userIdDisplay.textContent = 'Errore di autenticazione. Riprova.';
+            }
+        } catch (error) {
+            console.error("Errore durante l'autenticazione:", error);
+            userIdDisplay.textContent = 'Errore di connessione. Riprova più tardi.';
+        } finally {
+            // Nascondi l'overlay di caricamento in ogni caso
+            loadingOverlay.style.display = 'none';
         }
     });
 
@@ -211,12 +220,17 @@
                                             <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 11-2 0v6a1 1 0 112 0V8z" clip-rule="evenodd" />
                                         </svg>`;
                 deleteButton.onclick = async () => {
+                    // Controlla che il database sia disponibile prima di tentare la cancellazione
+                    if (!db) {
+                        console.error("Database non disponibile.");
+                        return;
+                    }
                     try {
-                        // Cancella l'ordine dal database
                         const orderDocRef = doc(db, `artifacts/${appId}/public/data/kitchen_orders`, order.id);
                         await deleteDoc(orderDocRef);
                     } catch (e) {
                         console.error("Errore durante la cancellazione dell'ordine:", e);
+                        showCustomMessage("Errore: Impossibile cancellare l'ordine. Riprova.");
                     }
                 };
                 actionsDiv.appendChild(deleteButton);
