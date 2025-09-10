@@ -168,15 +168,8 @@
             auth = getAuth(app);
             db = getFirestore(app);
 
-            // Tenta l'autenticazione
-            if (authToken) {
-                await signInWithCustomToken(auth, authToken);
-            } else {
-                await signInAnonymously(auth);
-            }
-
-            // Imposta il listener per la sincronizzazione degli ordini solo dopo l'autenticazione
-            onAuthStateChanged(auth, (user) => {
+            // Imposta un listener per l'autenticazione per gestire lo stato dell'utente
+            onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     const userId = user.uid;
                     userIdDisplay.textContent = `Il tuo ID: ${userId}`;
@@ -192,13 +185,27 @@
                         });
                         renderOrders(orders);
                         loadingOverlay.style.display = 'none';
+                    }, (error) => {
+                        console.error("Errore di sincronizzazione:", error);
+                        loadingOverlay.style.display = 'none';
+                        showCustomMessage('Errore: Sincronizzazione fallita. Ricarica la pagina.', true);
                     });
                 } else {
-                    userIdDisplay.textContent = 'Autenticazione fallita. Riprova.';
-                    loadingOverlay.style.display = 'none';
+                    // Se l'utente non è autenticato, tenta di autenticarlo
+                    try {
+                        if (authToken) {
+                            await signInWithCustomToken(auth, authToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Autenticazione fallita:", error);
+                        userIdDisplay.textContent = 'Autenticazione fallita. Riprova.';
+                        loadingOverlay.style.display = 'none';
+                        showCustomMessage('Errore: Impossibile autenticarsi. Ricarica la pagina.', true);
+                    }
                 }
             });
-
         } catch (error) {
             console.error("Errore fatale nell'inizializzazione dell'app:", error);
             userIdDisplay.textContent = 'Errore di avvio. Controlla la console per i dettagli.';
@@ -343,3 +350,4 @@
 </body>
 </html>
 
+    
