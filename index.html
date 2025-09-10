@@ -89,7 +89,6 @@
 </div>
 
 <script type="module">
-    // Importa le librerie Firebase
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, orderBy, query, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -99,19 +98,10 @@
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
     const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-    // Inizializza Firebase
     let app, auth, db;
     let authIsReady = false;
 
-    try {
-        app = initializeApp(firebaseConfig);
-        auth = getAuth(app);
-        db = getFirestore(app);
-    } catch (e) {
-        console.error("Errore nell'inizializzazione di Firebase:", e);
-    }
-
-    // Variabili per gli elementi DOM
+    // Elementi DOM
     const dishesContainer = document.getElementById('dishesContainer');
     const addDishButton = document.getElementById('addDishButton');
     const timeInput = document.getElementById('timeInput');
@@ -121,10 +111,31 @@
     const loadingOverlay = document.getElementById('loading-overlay');
     const userIdDisplay = document.getElementById('userIdDisplay');
 
+    // Funzione per visualizzare messaggi personalizzati (al posto di alert)
+    const showCustomMessage = (message, isError = true) => {
+        const existingMessage = document.getElementById('custom-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+        const messageDiv = document.createElement('div');
+        messageDiv.id = 'custom-message';
+        messageDiv.className = `fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-6 py-4 rounded-md shadow-lg z-50 text-center transition-all duration-300 transform scale-0 opacity-0 ${isError ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`;
+        messageDiv.textContent = message;
+        document.body.appendChild(messageDiv);
+        setTimeout(() => {
+            messageDiv.classList.add('scale-100', 'opacity-100');
+        }, 10);
+        setTimeout(() => {
+            messageDiv.classList.remove('scale-100', 'opacity-100');
+            setTimeout(() => messageDiv.remove(), 300);
+        }, 3000);
+    };
+
     // Funzione per riprodurre un suono di notifica
     const playNotificationSound = () => {
         try {
             const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioContext) return;
             const now = audioContext.currentTime;
             const frequency1 = 300; 
             const frequency2 = 400; 
@@ -149,63 +160,52 @@
             console.error("Errore nella riproduzione del suono:", e);
         }
     };
-    
-    // Funzione per visualizzare un messaggio personalizzato
-    const showCustomMessage = (message) => {
-        const existingMessage = document.getElementById('custom-message');
-        if (existingMessage) {
-            existingMessage.remove();
-        }
-        const messageDiv = document.createElement('div');
-        messageDiv.id = 'custom-message';
-        messageDiv.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white px-6 py-4 rounded-md shadow-lg z-50 text-center transition-all duration-300 transform scale-0 opacity-0';
-        messageDiv.textContent = message;
-        document.body.appendChild(messageDiv);
-        setTimeout(() => {
-            messageDiv.classList.add('scale-100', 'opacity-100');
-        }, 10);
-        setTimeout(() => {
-            messageDiv.classList.remove('scale-100', 'opacity-100');
-            setTimeout(() => messageDiv.remove(), 300);
-        }, 3000);
-    };
 
-    // Gestione dello stato di autenticazione
-    onAuthStateChanged(auth, async (user) => {
+    // Inizializzazione Firebase e gestione autenticazione
+    const initializeFirebase = async () => {
         try {
-            if (!user) {
-                if (authToken) {
-                    await signInWithCustomToken(auth, authToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            }
-            
-            if (auth.currentUser) {
-                const userId = auth.currentUser.uid;
-                userIdDisplay.textContent = `Il tuo ID: ${userId}`;
-                authIsReady = true;
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
 
-                const ordersCollection = collection(db, `artifacts/${appId}/public/data/kitchen_orders`);
-                
-                const q = query(ordersCollection, orderBy('createdAt', 'desc'));
-                onSnapshot(q, (snapshot) => {
-                    const orders = [];
-                    snapshot.forEach(doc => {
-                        orders.push({ id: doc.id, ...doc.data() });
-                    });
-                    renderOrders(orders);
-                });
+            // Tenta l'autenticazione
+            if (authToken) {
+                await signInWithCustomToken(auth, authToken);
             } else {
-                userIdDisplay.textContent = 'Errore di autenticazione. Riprova.';
+                await signInAnonymously(auth);
             }
+
+            // Imposta il listener per la sincronizzazione degli ordini solo dopo l'autenticazione
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    const userId = user.uid;
+                    userIdDisplay.textContent = `Il tuo ID: ${userId}`;
+                    authIsReady = true;
+
+                    const ordersCollection = collection(db, `artifacts/${appId}/public/data/kitchen_orders`);
+                    const q = query(ordersCollection, orderBy('createdAt', 'desc'));
+                    
+                    onSnapshot(q, (snapshot) => {
+                        const orders = [];
+                        snapshot.forEach(doc => {
+                            orders.push({ id: doc.id, ...doc.data() });
+                        });
+                        renderOrders(orders);
+                        loadingOverlay.style.display = 'none';
+                    });
+                } else {
+                    userIdDisplay.textContent = 'Autenticazione fallita. Riprova.';
+                    loadingOverlay.style.display = 'none';
+                }
+            });
+
         } catch (error) {
-            console.error("Errore durante l'autenticazione:", error);
-            userIdDisplay.textContent = 'Errore di connessione. Riprova più tardi.';
-        } finally {
+            console.error("Errore fatale nell'inizializzazione dell'app:", error);
+            userIdDisplay.textContent = 'Errore di avvio. Controlla la console per i dettagli.';
+            showCustomMessage('Errore: Impossibile connettersi ai servizi. Riprova più tardi.', true);
             loadingOverlay.style.display = 'none';
         }
-    });
+    };
 
     // Funzione per il rendering degli ordini
     const renderOrders = (orders) => {
@@ -244,14 +244,16 @@
                 deleteButton.onclick = async () => {
                     if (!db) {
                         console.error("Database non disponibile.");
+                        showCustomMessage("Errore: Impossibile connettersi al database.", true);
                         return;
                     }
                     try {
                         const orderDocRef = doc(db, `artifacts/${appId}/public/data/kitchen_orders`, order.id);
                         await deleteDoc(orderDocRef);
+                        showCustomMessage("Ordine cancellato con successo!", false);
                     } catch (e) {
                         console.error("Errore durante la cancellazione dell'ordine:", e);
-                        showCustomMessage("Errore: Impossibile cancellare l'ordine. Riprova.");
+                        showCustomMessage("Errore: Impossibile cancellare l'ordine. Riprova.", true);
                     }
                 };
                 actionsDiv.appendChild(deleteButton);
@@ -276,7 +278,7 @@
     // Aggiungi un nuovo ordine completo al database
     const addOrder = async () => {
         if (!authIsReady) {
-            showCustomMessage("L'app non è ancora pronta. Attendi qualche istante.");
+            showCustomMessage("L'app non è ancora pronta. Attendi qualche istante.", true);
             return;
         }
 
@@ -297,7 +299,7 @@
                 break;
             } else if (dish && quantity <= 0) {
                  isValid = false;
-                 showCustomMessage('La quantità deve essere maggiore di 0.');
+                 showCustomMessage('La quantità deve essere maggiore di 0.', true);
                  return;
             }
         }
@@ -322,30 +324,22 @@
                 timeInput.value = '';
             } catch (e) {
                 console.error("Errore nell'aggiunta dell'ordine al database:", e);
-                showCustomMessage("Errore: Impossibile aggiungere l'ordine. Riprova.");
+                showCustomMessage("Errore: Impossibile aggiungere l'ordine. Riprova.", true);
             }
         } else if (!time) {
-            showCustomMessage('Per favore, inserisci l\'orario.');
+            showCustomMessage('Per favore, inserisci l\'orario.', true);
         } else {
-            showCustomMessage('Per favore, aggiungi almeno una pietanza.');
+            showCustomMessage('Per favore, aggiungi almeno una pietanza.', true);
         }
     };
 
     addButton.addEventListener('click', addOrder);
 
-    // Gestione del timeout di caricamento per sicurezza
-    setTimeout(() => {
-        if (loadingOverlay.style.display !== 'none') {
-            loadingOverlay.style.display = 'none';
-            if (!authIsReady) {
-                showCustomMessage("Errore di connessione. Riprova.");
-            }
-        }
-    }, 5000); 
+    // Avvia l'inizializzazione dell'app all'inizio
+    initializeFirebase();
 
 </script>
 
 </body>
 </html>
 
-    
