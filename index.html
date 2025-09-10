@@ -32,12 +32,29 @@
             transform: translateY(-2px);
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
     </style>
 </head>
 <body>
 
+<div id="loading-overlay" class="loading-overlay">
+    <div class="text-xl font-semibold text-gray-700">Caricamento...</div>
+</div>
+
 <div class="container flex flex-col items-center">
-    <h1 class="text-3xl font-bold text-gray-800 mb-6">Ordini per la Cucina</h1>
+    <h1 class="text-3xl font-bold text-gray-800 mb-2">Ordini per la Cucina</h1>
+    <p id="userIdDisplay" class="text-sm text-gray-500 mb-6"></p>
 
     <!-- Form per l'inserimento degli ordini -->
     <div class="w-full flex flex-col space-y-4">
@@ -71,36 +88,102 @@
 
 </div>
 
-<script>
-    // Recupera gli elementi DOM
+<script type="module">
+    // Importa le librerie Firebase
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, deleteDoc, onSnapshot, orderBy, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Variabili globali fornite dall'ambiente
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    const authToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    // Inizializza Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+
+    // Variabili per gli elementi DOM
     const dishesContainer = document.getElementById('dishesContainer');
     const addDishButton = document.getElementById('addDishButton');
     const timeInput = document.getElementById('timeInput');
     const addButton = document.getElementById('addButton');
     const orderList = document.getElementById('orderList');
     const emptyMessage = document.getElementById('emptyMessage');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const userIdDisplay = document.getElementById('userIdDisplay');
 
-    // Funzione per salvare gli ordini
-    const saveOrders = (orders) => {
-        localStorage.setItem('kitchenOrders', JSON.stringify(orders));
-        renderOrders();
+    // Funzione per riprodurre un suono di notifica
+    const playNotificationSound = () => {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioContext.currentTime;
+            const frequency1 = 300; 
+            const frequency2 = 400; 
+            const gainNode = audioContext.createGain();
+            gainNode.gain.setValueAtTime(0, now);
+            gainNode.gain.linearRampToValueAtTime(0.7, now + 0.1);
+            gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+            const oscillator1 = audioContext.createOscillator();
+            oscillator1.type = 'sawtooth';
+            oscillator1.frequency.setValueAtTime(frequency1, now);
+            const oscillator2 = audioContext.createOscillator();
+            oscillator2.type = 'sine';
+            oscillator2.frequency.setValueAtTime(frequency2, now);
+            oscillator1.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            oscillator1.start(now);
+            oscillator1.stop(now + 0.5);
+            oscillator2.start(now);
+            oscillator2.stop(now + 0.5);
+        } catch (e) {
+            console.error("Errore nella riproduzione del suono:", e);
+        }
     };
 
-    // Funzione per caricare gli ordini
-    const loadOrders = () => {
-        const ordersString = localStorage.getItem('kitchenOrders');
-        return ordersString ? JSON.parse(ordersString) : [];
-    };
+    // Gestione dello stato di autenticazione
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // Utente autenticato, nascondi l'overlay di caricamento
+            loadingOverlay.style.display = 'none';
+            const userId = user.uid;
+            userIdDisplay.textContent = `Il tuo ID: ${userId}`;
+
+            // Collezione Firestore per gli ordini condivisi
+            const ordersCollection = collection(db, `artifacts/${appId}/public/data/kitchen_orders`);
+            
+            // Abilita la sincronizzazione in tempo reale con onSnapshot
+            // Ordiniamo per data di creazione per mantenere la coerenza
+            const q = query(ordersCollection, orderBy('createdAt', 'desc'));
+            onSnapshot(q, (snapshot) => {
+                const orders = [];
+                snapshot.forEach(doc => {
+                    orders.push({ id: doc.id, ...doc.data() });
+                });
+                renderOrders(orders);
+            });
+        } else {
+            // Se non c'è un token, esegui l'accesso anonimo
+            try {
+                await (authToken ? signInWithCustomToken(auth, authToken) : signInAnonymously(auth));
+            } catch (error) {
+                console.error("Errore durante l'autenticazione:", error);
+                loadingOverlay.style.display = 'none';
+                userIdDisplay.textContent = 'Errore di connessione.';
+            }
+        }
+    });
 
     // Funzione per il rendering degli ordini
-    const renderOrders = () => {
-        const orders = loadOrders();
+    const renderOrders = (orders) => {
         orderList.innerHTML = '';
         if (orders.length === 0) {
             emptyMessage.style.display = 'block';
         } else {
             emptyMessage.style.display = 'none';
-            orders.forEach((order, index) => {
+            orders.forEach((order) => {
                 const li = document.createElement('li');
                 li.className = `order-card bg-gray-50`;
                 
@@ -127,57 +210,20 @@
                 deleteButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                             <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm6 0a1 1 0 11-2 0v6a1 1 0 112 0V8z" clip-rule="evenodd" />
                                         </svg>`;
-                deleteButton.onclick = () => {
-                    orders.splice(index, 1);
-                    saveOrders(orders);
+                deleteButton.onclick = async () => {
+                    try {
+                        // Cancella l'ordine dal database
+                        const orderDocRef = doc(db, `artifacts/${appId}/public/data/kitchen_orders`, order.id);
+                        await deleteDoc(orderDocRef);
+                    } catch (e) {
+                        console.error("Errore durante la cancellazione dell'ordine:", e);
+                    }
                 };
                 actionsDiv.appendChild(deleteButton);
 
                 li.appendChild(actionsDiv);
                 orderList.appendChild(li);
             });
-        }
-    };
-
-    // Funzione per riprodurre un suono di notifica più "distinto"
-    const playNotificationSound = () => {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const now = audioContext.currentTime;
-            
-            // Frequenze per un suono più profondo
-            const frequency1 = 300; 
-            const frequency2 = 400; 
-
-            // Nodo del guadagno per controllare il volume e la durata
-            const gainNode = audioContext.createGain();
-            gainNode.gain.setValueAtTime(0, now);
-            gainNode.gain.linearRampToValueAtTime(0.7, now + 0.1);
-            gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
-
-            // Oscillatore 1
-            const oscillator1 = audioContext.createOscillator();
-            oscillator1.type = 'sawtooth';
-            oscillator1.frequency.setValueAtTime(frequency1, now);
-            
-            // Oscillatore 2 per un effetto più ricco
-            const oscillator2 = audioContext.createOscillator();
-            oscillator2.type = 'sine';
-            oscillator2.frequency.setValueAtTime(frequency2, now);
-            
-            // Connessioni
-            oscillator1.connect(gainNode);
-            oscillator2.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            // Avvio e arresto
-            oscillator1.start(now);
-            oscillator1.stop(now + 0.5);
-            oscillator2.start(now);
-            oscillator2.stop(now + 0.5);
-
-        } catch (e) {
-            console.error("Errore nella riproduzione del suono:", e);
         }
     };
 
@@ -192,12 +238,11 @@
         dishesContainer.appendChild(newDishDiv);
     });
 
-    // Aggiungi un nuovo ordine completo
-    const addOrder = () => {
+    // Aggiungi un nuovo ordine completo al database
+    const addOrder = async () => {
         const dishInputs = document.querySelectorAll('.dish-input');
         const quantityInputs = document.querySelectorAll('.quantity-input');
         const time = timeInput.value.trim();
-
         const dishes = [];
         let isValid = true;
         
@@ -218,20 +263,29 @@
         }
 
         if (dishes.length > 0 && time && isValid) {
-            const orders = loadOrders();
-            const newOrder = { dishes, time, done: false };
-            orders.push(newOrder);
-            saveOrders(orders);
-            
-            playNotificationSound(); 
-            
-            dishesContainer.innerHTML = `
-                <div class="flex space-x-2">
-                    <input type="text" placeholder="Piatto (es. Pasta e fagioli)" class="dish-input w-2/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
-                    <input type="number" placeholder="Quantità" value="1" min="1" class="quantity-input w-1/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
-                </div>
-            `;
-            timeInput.value = '';
+            try {
+                // Aggiungi un nuovo documento alla collezione di Firestore
+                const newOrder = { 
+                    dishes, 
+                    time, 
+                    createdAt: new Date().toISOString() // Aggiungiamo un timestamp per l'ordinamento
+                };
+                await addDoc(collection(db, `artifacts/${appId}/public/data/kitchen_orders`), newOrder);
+                
+                playNotificationSound(); 
+                
+                // Pulisci i campi dopo l'invio
+                dishesContainer.innerHTML = `
+                    <div class="flex space-x-2">
+                        <input type="text" placeholder="Piatto (es. Pasta e fagioli)" class="dish-input w-2/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                        <input type="number" placeholder="Quantità" value="1" min="1" class="quantity-input w-1/3 px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200">
+                    </div>
+                `;
+                timeInput.value = '';
+            } catch (e) {
+                console.error("Errore nell'aggiunta dell'ordine al database:", e);
+                showCustomMessage("Errore: Impossibile aggiungere l'ordine. Riprova.");
+            }
         } else if (!time) {
             showCustomMessage('Per favore, inserisci l\'orario.');
         } else {
@@ -245,26 +299,22 @@
         if (existingMessage) {
             existingMessage.remove();
         }
-
         const messageDiv = document.createElement('div');
         messageDiv.id = 'custom-message';
         messageDiv.className = 'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white px-6 py-4 rounded-md shadow-lg z-50 text-center transition-all duration-300 transform scale-0 opacity-0';
         messageDiv.textContent = message;
         document.body.appendChild(messageDiv);
-
         setTimeout(() => {
             messageDiv.classList.add('scale-100', 'opacity-100');
         }, 10);
-
         setTimeout(() => {
             messageDiv.classList.remove('scale-100', 'opacity-100');
             setTimeout(() => messageDiv.remove(), 300);
         }, 3000);
     };
 
-    // Event listeners
+    // Event listener per aggiungere un ordine
     addButton.addEventListener('click', addOrder);
-    document.addEventListener('DOMContentLoaded', renderOrders);
 </script>
 
 </body>
