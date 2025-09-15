@@ -39,7 +39,7 @@ input[type="time"], input[type="text"], input[type="number"] {
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
-    box-sizing: border-box; /* Assicura che il padding non allarghi l'input */
+    box-sizing: border-box;
 }
 
 #inviaOrdine {
@@ -78,3 +78,18 @@ ul li span {
     font-weight: bold;
     color: #555;
 }
+
+.completa-btn {
+    background-color: #5cb85c;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.completa-btn:hover {
+    background-color: #4cae4c;
+}
+
