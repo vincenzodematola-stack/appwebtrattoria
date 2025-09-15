@@ -1,6 +1,6 @@
 // Inizializza il database di Firebase
 const database = firebase.database();
-const ordiniRef = database.ref('ordini'); // Riferimento alla cartella "ordini" nel database
+const ordiniRef = database.ref('ordini');
 
 // Seleziona gli elementi della pagina
 const oraUscitaInput = document.getElementById('oraUscita');
@@ -16,12 +16,11 @@ inviaOrdineBtn.addEventListener('click', function() {
     const quantita = quantitaInput.value;
 
     if (ora && pietanza && quantita) {
-        // Crea un nuovo oggetto ordine
         const nuovoOrdine = {
             ora: ora,
             pietanza: pietanza,
             quantita: quantita,
-            timestamp: Date.now() // Aggiunge un timestamp per l'ordine
+            timestamp: Date.now()
         };
 
         // Invia l'ordine a Firebase
@@ -45,19 +44,17 @@ ordiniRef.on('child_added', (snapshot) => {
     const ordine = snapshot.val();
     const ordineKey = snapshot.key;
 
-    // Crea l'elemento della lista per l'ordine
     const li = document.createElement('li');
+    li.setAttribute('data-key', ordineKey); // Aggiungi la chiave per la rimozione
     li.innerHTML = `
         Ora: <span>${ordine.ora}</span> -
         Pietanza: <span>${ordine.quantita} ${ordine.pietanza}</span>
     `;
 
-    // Aggiungi un pulsante per segnare l'ordine come completato
     const completaBtn = document.createElement('button');
     completaBtn.textContent = 'Completato';
-    completaBtn.classList.add('completa-btn'); // Aggiungi una classe per lo stile
+    completaBtn.classList.add('completa-btn');
     
-    // Aggiungi un ascoltatore per il pulsante "Completato"
     completaBtn.addEventListener('click', () => {
         ordiniRef.child(ordineKey).remove();
     });
@@ -69,14 +66,8 @@ ordiniRef.on('child_added', (snapshot) => {
 // Ascolta gli ordini rimossi da Firebase e li rimuove dalla lista
 ordiniRef.on('child_removed', (snapshot) => {
     const ordineKey = snapshot.key;
-    const elementiLista = listaOrdiniUl.children;
-    for (let i = 0; i < elementiLista.length; i++) {
-        // Cerca l'elemento della lista corrispondente all'ordine rimosso
-        if (elementiLista[i].getAttribute('data-key') === ordineKey) {
-            listaOrdiniUl.removeChild(elementiLista[i]);
-            break;
-        }
+    const elementoDaRimuovere = document.querySelector(`li[data-key="${ordineKey}"]`);
+    if (elementoDaRimuovere) {
+        listaOrdiniUl.removeChild(elementoDaRimuovere);
     }
 });
-
-          
