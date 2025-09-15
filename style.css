@@ -1,49 +1,80 @@
-/* Stile per l'intero corpo della pagina */
 body {
-    font-family: Arial, sans-serif;
-    background-color: #2c3e50;
-    color: #ecf0f1;
-    text-align: center;
-    padding: 20px;
-    margin: 0;
+    font-family: sans-serif;
+    background-color: #f4f4f9;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 50px;
+    min-height: 100vh;
 }
 
-/* Stile per i titoli */
-h1 { color: #3498db; margin-bottom: 5px; }
-h2 { color: #2ecc71; margin-top: 40px; }
-p { font-size: 1.1em; color: #bdc3c7; }
+.container, .ordini-container {
+    background-color: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    width: 400px;
+    margin: 20px;
+}
 
-/* Stile per le sezioni */
-hr { border: 1px solid #34495e; width: 80%; margin: 30px auto; }
+h1, h2 {
+    color: #d9534f;
+    text-align: center;
+    margin-bottom: 20px;
+}
 
-/* Stile per i pulsanti */
-button {
-    background-color: #3498db;
+.form-group {
+    margin-bottom: 20px;
+}
+
+label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+input[type="time"], input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box; /* Assicura che il padding non allarghi l'input */
+}
+
+#inviaOrdine {
+    width: 100%;
+    padding: 12px;
+    background-color: #d9534f;
     color: white;
-    padding: 15px 30px;
     border: none;
-    border-radius: 5px;
+    border-radius: 4px;
     font-size: 16px;
     cursor: pointer;
-    transition: background-color 0.3s;
+    transition: background-color 0.3s ease;
 }
-button:hover { background-color: #2980b9; }
 
-/* Stile per gli input */
-input {
-    padding: 8px;
+#inviaOrdine:hover {
+    background-color: #c9302c;
+}
+
+ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+ul li {
+    background-color: #f9f9f9;
+    padding: 15px;
+    border: 1px solid #eee;
     border-radius: 4px;
-    border: 1px solid #7f8c8d;
-    background-color: #34495e;
-    color: #ecf0f1;
-    font-size: 1em;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
-/* Stile per le aree di stato e istruzioni */
-#status, #instructions {
-    margin-top: 20px;
-    font-size: 1.2em;
+ul li span {
     font-weight: bold;
-    color: #f1c40f;
-    min-height: 50px;
+    color: #555;
 }
