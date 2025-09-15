@@ -28,12 +28,14 @@ document.addEventListener("DOMContentLoaded", () => {
         referenceCoords.dec = '+38° 47\''; // Dec di Vega
         isAligned = true;
         setStatus(`Allineamento completato! Ora puoi cercare gli oggetti.`);
+        setInstructions(""); // Pulisce le istruzioni precedenti
     });
     
     // Aggiungiamo un ascoltatore per il pulsante "Trova".
     findButton.addEventListener("click", () => {
         if (!isAligned) {
             setStatus("Errore: Prima devi allineare il telescopio (Step 1).");
+            setInstructions("");
             return;
         }
 
@@ -42,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (!targetRa || !targetDec) {
             setStatus("Errore: Inserisci le coordinate dell'oggetto da trovare.");
+            setInstructions("");
             return;
         }
         
@@ -56,5 +59,4 @@ document.addEventListener("DOMContentLoaded", () => {
             <p>Sposta il telescopio di <strong>${raDiff}</strong> in Ascensione Retta e <strong>${decDiff}</strong> in Declinazione.</p>
         `);
     });
-
 });
