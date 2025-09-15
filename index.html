@@ -3,39 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Astro Tutor</title>
-    <link rel="stylesheet" href="style.css"> 
+    <title>Gestione Ordini Trattoria</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <h1>Astro Tutor</h1>
-    <p>La tua guida per il telescopio manuale.</p>
+    <div class="container">
+        <h1>Nuovo Ordine</h1>
 
-    <button id="alignButton">1. Allinea su un oggetto</button>
-    <p>Punta un oggetto noto e clicca il pulsante.</p>
+        <div class="form-group">
+            <label for="oraUscita">Ora di Uscita:</label>
+            <input type="time" id="oraUscita" required>
+        </div>
 
-    <hr>
+        <div class="form-group">
+            <label for="pietanza">Pietanza:</label>
+            <input type="text" id="pietanza" required>
+        </div>
 
-    <h2>2. Trova un oggetto</h2>
-    <p>Inserisci le coordinate dell'oggetto desiderato.</p>
-    <div>
-        <label for="raInput">Ascensione Retta (AR):</label>
-        <input type="text" id="raInput" placeholder="es. 18h 36m">
+        <div class="form-group">
+            <label for="quantita">Quantità:</label>
+            <input type="number" id="quantita" required min="1">
+        </div>
+
+        <button id="inviaOrdine">Invia Ordine</button>
     </div>
-    <div style="margin-top: 10px;">
-        <label for="decInput">Declinazione (Dec):</label>
-        <input type="text" id="decInput" placeholder="es. +38° 47'">
+
+    <div class="ordini-container">
+        <h2>Ordini in Attesa</h2>
+        <ul id="listaOrdini"></ul>
     </div>
-    <button id="findButton" style="margin-top: 20px;">Trova</button>
 
-    <hr>
-
-    <div id="status">In attesa di istruzioni...</div>
-
-    <hr>
-
-    <div id="instructions"></div>
-
-    <script src="app.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
