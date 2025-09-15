@@ -1,19 +1,31 @@
-<!DOCTYPE html>
-<html lang="it">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Astro Tutor</title>
-</head>
 <body>
 
     <h1>Astro Tutor</h1>
     <p>La tua guida per il telescopio manuale.</p>
 
-    <button id="alignButton">Allinea il telescopio</button>
+    <button id="alignButton">1. Allinea su un oggetto</button>
+    <p>Punta un oggetto noto e clicca il pulsante.</p>
 
     <div id="status">In attesa dell'allineamento...</div>
 
+    <hr>
+
+    <h2>2. Trova un oggetto</h2>
+    <p>Inserisci le coordinate dell'oggetto desiderato.</p>
+    <div>
+        <label for="raInput">Ascensione Retta (AR):</label>
+        <input type="text" id="raInput" placeholder="es. 18h 36m">
+    </div>
+    <div style="margin-top: 10px;">
+        <label for="decInput">Declinazione (Dec):</label>
+        <input type="text" id="decInput" placeholder="es. +38° 47'">
+    </div>
+    <button id="findButton" style="margin-top: 20px;">Trova</button>
+
+    <hr>
+
+    <div id="mapContainer">
+        </div>
+
     <script src="app.js"></script>
 </body>
-</html>
